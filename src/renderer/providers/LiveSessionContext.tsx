@@ -23,6 +23,10 @@ import {
   toggledState,
 } from '../utils/stewardDecisionState';
 import { useApi } from './ApiContext';
+import {
+  formatDecisionChatMessage,
+  resolveStewardAnnouncement,
+} from '../utils/stewardChat';
 import { LiveIndicator, deriveLiveIndicator } from '../hooks/useLiveIndicator';
 import {
   buildSessionState,
@@ -37,9 +41,12 @@ import {
 import {
   isDriverScopedOutcome,
   outcomeForShortcut,
+  RESOLVED_QUIETLY_OUTCOME,
 } from '../utils/stewardActions';
 import {
   DEFAULT_LIVE_INCIDENT_FILTERS,
+  DEFAULT_LIVE_INCIDENT_SORT,
+  LiveIncidentSort,
   LiveDecisionOutcome,
   LiveDriverRef,
   LiveIncident,
@@ -535,6 +542,18 @@ export interface LiveSessionContextValue {
     See LiveSessionContext.stability.test.tsx.
   */
   onSelectIncident: (incidentId: string) => void;
+  /** Closes the open dossier, back to whatever the screen shows without one. */
+  onClearSelectedIncident: () => void;
+  /**
+   * Whether a heavy enough new incident rewinds the game's picture by itself.
+   *
+   * Held here so it survives moving between live sections, and deliberately not
+   * stored: it starts off every time the app does. A feature that takes over
+   * the game's picture should be something the steward switched on this
+   * session, not something left on from last week.
+   */
+  autoReplay: boolean;
+  onToggleAutoReplay: (enabled: boolean) => void;
   /**
    * Open a segment of this weekend.
    *
@@ -548,6 +567,9 @@ export interface LiveSessionContextValue {
   onChangeClassFilter: (next: string) => void;
   /** Patches one filter without the caller having to hold the rest. */
   onChangeIncidentFilters: (patch: Partial<LiveIncidentFilters>) => void;
+  /** How the triage queue is ordered. Kept across live sections. */
+  incidentSort: LiveIncidentSort;
+  onChangeIncidentSort: (next: LiveIncidentSort) => void;
   onResetIncidentFilters: () => void;
   onChangeReasoning: (next: string) => void;
   onFocusCar: (slotId: number | undefined) => void;
@@ -564,9 +586,31 @@ export interface LiveSessionContextValue {
   onRewatchIncident: (incidentId: string) => void;
   /** Put the picture back on the live edge. A no-op if it is already there. */
   onReturnToLive: () => void;
+  /**
+   * How many times the picture has been sent back to live from the app. Auto
+   * replay watches it to tell when the steward pressed Live themselves.
+   */
+  returnToLiveCount: number;
   onFlag: (incidentId: string) => void;
   onDefer: (incidentId: string) => void;
-  onDecide: (incidentId: string, outcome: LiveDecisionOutcome) => void;
+  /**
+   * `custom` is the hand-assembled call: it names its own driver and reason
+   * rather than taking them from the dossier's selection and reasoning box, and
+   * it always records — it never toggles an existing call off.
+   */
+  onDecide: (
+    incidentId: string,
+    outcome: LiveDecisionOutcome,
+    custom?: { targetSteamId: string; reasoning: string },
+  ) => void;
+  /** The message waiting in the chat box. */
+  chatDraft: string;
+  /** Whether calls post to the in-game chat the moment they are made. */
+  chatAutosend: boolean;
+  onChangeChatDraft: (next: string) => void;
+  onSendChat: (message: string) => void;
+  onAnnounce: () => void;
+  onToggleChatAutosend: (enabled: boolean) => void;
 }
 
 const LiveSessionContext = createContext<LiveSessionContextValue | undefined>(
@@ -585,6 +629,9 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     saveStewardDecision,
     stewardAuthor,
     stewardActions,
+    stewardAnnouncementTemplate,
+    stewardChatAutosend,
+    setStewardChatAutosend,
   } = useApi();
 
   /*
@@ -656,12 +703,21 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   // Cleared when the steward moves on, and again once a call is written — a
   // reason left over from the last incident is worse than none.
   const [reasoningDraft, setReasoningDraft] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
+  const [autoReplay, setAutoReplay] = useState(false);
 
   /*
     Both raw enough to be referentially stable for the life of the provider:
     the patch form reads the previous value from the setter rather than closing
     over it, so neither depends on anything that changes on a poll tick.
   */
+  const [incidentSort, setIncidentSort] = useState<LiveIncidentSort>(
+    DEFAULT_LIVE_INCIDENT_SORT,
+  );
+  const onClearSelectedIncident = useCallback(
+    () => setSelectedIncidentId(undefined),
+    [],
+  );
   const onChangeIncidentFilters = useCallback(
     (patch: Partial<LiveIncidentFilters>) =>
       setIncidentFilters((current) => ({ ...current, ...patch })),
@@ -960,6 +1016,9 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     standings,
     classFilter,
     focusedSlotId,
+    stewardAnnouncementTemplate,
+    stewardChatAutosend,
+    isReviewingRecord,
   });
   latest.current = {
     incidents,
@@ -975,7 +1034,48 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     standings,
     classFilter,
     focusedSlotId,
+    stewardAnnouncementTemplate,
+    stewardChatAutosend,
+    isReviewingRecord,
   };
+
+  /*
+    The in-game chat.
+
+    One rule for every message this screen produces: with autosend on it is
+    posted, with autosend off it is put in the chat box for the steward to read,
+    edit and send. A chat line reaches every driver in the session and cannot be
+    recalled, so sending without a second look is the steward's choice to make.
+
+    The main process formats nothing and refuses to post outside a multiplayer
+    session — see `steward-chat.ts`.
+  */
+  const onSendChat = useCallback((message: string) => {
+    if (!message.trim()) {
+      return;
+    }
+    sendMessage(CONSTANTS.API.POST_STEWARD_CHAT_MESSAGE, { message });
+  }, []);
+
+  const offerChatMessage = useCallback(
+    (message: string) => {
+      if (latest.current.stewardChatAutosend) {
+        onSendChat(message);
+      } else {
+        setChatDraft(message);
+      }
+    },
+    [onSendChat],
+  );
+
+  const onAnnounce = useCallback(() => {
+    offerChatMessage(
+      resolveStewardAnnouncement(
+        latest.current.stewardAnnouncementTemplate,
+        latest.current.stewardAuthor,
+      ),
+    );
+  }, [offerChatMessage]);
 
   /*
     Clicking the running session returns to following it rather than pinning it,
@@ -1124,20 +1224,29 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const onDecide = useCallback(
-    (incidentId: string, outcome: LiveDecisionOutcome) => {
+    (
+      incidentId: string,
+      outcome: LiveDecisionOutcome,
+      custom?: { targetSteamId: string; reasoning: string },
+    ) => {
       const {
         incidents: held,
         decisionIdentity: heldIdentity,
         sessionKey: heldKey,
         stewardAuthor: heldAuthor,
         stewardActions: heldActions,
-        effectiveTargetSteamId: heldTarget,
-        reasoningDraft: heldReasoning,
+        effectiveTargetSteamId: selectedTarget,
+        reasoningDraft: draftedReasoning,
+        isReviewingRecord: heldReviewingRecord,
       } = latest.current;
       const incident = held.find((entry) => entry.id === incidentId);
       if (!incident) {
         return;
       }
+
+      // A custom call brings its own driver and reason; see the prop's note.
+      const heldTarget = custom ? custom.targetSteamId : selectedTarget;
+      const heldReasoning = custom ? custom.reasoning : draftedReasoning;
 
       /*
         Whether this call names a driver is the action's own property, and the
@@ -1168,7 +1277,9 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
         — which is the far commoner correction.
       */
       const isSameCall =
-        incident.state === 'DECIDED' && incident.decision === outcome;
+        !custom &&
+        incident.state === 'DECIDED' &&
+        incident.decision === outcome;
       const state = toggledState('DECIDED', isSameCall);
 
       const decision = buildDecision(
@@ -1196,8 +1307,31 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
       saveStewardDecision(decision);
       setReasoningDraft('');
+
+      /*
+        Said in the session's chat, or queued for the steward to send. Not for a
+        call being taken back — there is nothing to announce — and not against a
+        finished segment, where the chat belongs to a different session than the
+        incident does.
+      */
+      if (
+        !isSameCall &&
+        !heldReviewingRecord &&
+        // The whole point of resolving quietly is that nobody is told.
+        outcome !== RESOLVED_QUIETLY_OUTCOME
+      ) {
+        offerChatMessage(
+          formatDecisionChatMessage({
+            actions: heldActions,
+            outcome,
+            target,
+            drivers: incident.drivers,
+            reason: heldReasoning,
+          }),
+        );
+      }
     },
-    [saveStewardDecision, withdrawOtherCalls],
+    [offerChatMessage, saveStewardDecision, withdrawOtherCalls],
   );
 
   /*
@@ -1326,8 +1460,10 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, []);
 
+  const [returnToLiveCount, setReturnToLiveCount] = useState(0);
   const onReturnToLive = useCallback(() => {
     sendMessage(CONSTANTS.API.POST_REPLAY_RETURN_TO_LIVE);
+    setReturnToLiveCount((count) => count + 1);
   }, []);
 
   /*
@@ -1480,20 +1616,32 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
       isReplayActive,
       gameCamera,
       onSelectIncident: setSelectedIncidentId,
+      onClearSelectedIncident,
+      autoReplay,
+      onToggleAutoReplay: setAutoReplay,
       onSelectSegment,
       onSelectTarget: setTargetSteamId,
       onChangeStateFilter: setStateFilter,
       onChangeClassFilter: setClassFilter,
       onChangeIncidentFilters,
+      incidentSort,
+      onChangeIncidentSort: setIncidentSort,
       onResetIncidentFilters,
       onChangeReasoning: setReasoningDraft,
       onFocusCar,
       onCycleFocus,
       onRewatchIncident,
       onReturnToLive,
+      returnToLiveCount,
       onFlag,
       onDefer,
       onDecide,
+      chatDraft,
+      chatAutosend: stewardChatAutosend,
+      onChangeChatDraft: setChatDraft,
+      onSendChat,
+      onAnnounce,
+      onToggleChatAutosend: setStewardChatAutosend,
     }),
     [
       activeSessionKey,
@@ -1511,12 +1659,21 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
       onReturnToLive,
       incidentFilterOptions,
       incidentFilters,
+      incidentSort,
+      autoReplay,
+      returnToLiveCount,
+      onClearSelectedIncident,
       incidents,
       isReviewingRecord,
       liveIndicator,
       liveUnreviewedCount,
       onChangeIncidentFilters,
       onDecide,
+      chatDraft,
+      stewardChatAutosend,
+      onSendChat,
+      onAnnounce,
+      setStewardChatAutosend,
       onDefer,
       onFlag,
       onFocusCar,

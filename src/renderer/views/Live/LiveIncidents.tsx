@@ -9,6 +9,7 @@ import { LiveTriageQueue } from '../../components/Live/LiveTriageQueue';
 import { LiveIncidentDossier } from '../../components/Live/LiveIncidentDossier';
 import { matchesLiveIncidentFilters } from '../../components/Live/liveFixtures';
 import { useLiveSession } from '../../providers/LiveSessionContext';
+import { RESOLVED_QUIETLY_OUTCOME } from '../../utils/stewardActions';
 
 /**
  * The adjudication surface: the quick filters, the triage queue, and the
@@ -33,6 +34,8 @@ export const LiveIncidents: React.FC = () => {
     stateFilter,
     incidentFilters,
     incidentFilterOptions,
+    incidentSort,
+    onChangeIncidentSort,
     priorCallsByDriver,
     reasoningDraft,
     targetSteamId,
@@ -111,7 +114,9 @@ export const LiveIncidents: React.FC = () => {
           options={incidentFilterOptions}
           matchCount={matchCount}
           totalCount={incidents.length}
+          sort={incidentSort}
           onChange={onChangeIncidentFilters}
+          onChangeSort={onChangeIncidentSort}
           onReset={onResetIncidentFilters}
         />
       </Box>
@@ -121,6 +126,7 @@ export const LiveIncidents: React.FC = () => {
         selectedIncidentId={selectedIncidentId}
         stateFilter={stateFilter}
         filters={incidentFilters}
+        sort={incidentSort}
         onSelectIncident={onSelectIncident}
         onChangeStateFilter={onChangeStateFilter}
         onClearFilters={onResetIncidentFilters}
@@ -150,6 +156,21 @@ export const LiveIncidents: React.FC = () => {
         onFlag={onFlag}
         onDefer={onDefer}
         onDecide={onDecide}
+        /*
+          Not against a record, like the camera and the rewatch: a finished
+          segment is being read back, not triaged.
+        */
+        onResolveQuietly={
+          isReviewingRecord
+            ? undefined
+            : (incidentId) => onDecide(incidentId, RESOLVED_QUIETLY_OUTCOME)
+        }
+        onDecideCustom={(incidentId, call) =>
+          onDecide(incidentId, call.outcome, {
+            targetSteamId: call.targetSteamId,
+            reasoning: call.reasoning,
+          })
+        }
       />
     </Box>
   );

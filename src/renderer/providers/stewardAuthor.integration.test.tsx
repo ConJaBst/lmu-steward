@@ -226,7 +226,11 @@ describe('the steward author on a new decision', () => {
     renderReplayDossier();
     applySettings('Bradley');
 
-    fireEvent.click(screen.getByRole('button', { name: /No Action/ }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    );
 
     expect(savedDecisions()).toHaveLength(1);
     expect(savedDecisions()[0].stewardAuthor).toBe('Bradley');
@@ -249,7 +253,11 @@ describe('the steward author on a new decision', () => {
 
     renderReplayDossier();
     applySettings('Race Control');
-    fireEvent.click(screen.getByRole('button', { name: /No Action/ }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    );
 
     const [replay] = savedDecisions();
 

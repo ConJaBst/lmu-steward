@@ -82,15 +82,33 @@ const typeFilter = (label: string) =>
   within(screen.getByRole('group', { name: 'Incident type' })).getByText(label);
 
 describe('live incident quick filters', () => {
-  it('should narrow the queue to one classification', () => {
+  // A chip is a switch for its own kind: clicking it takes that kind out.
+  it('should take one classification out of the queue', () => {
     renderLive();
-    expect(screen.getByText(aContact.timestampLabel)).toBeInTheDocument();
+    expect(screen.getByText(trackLimits.timestampLabel)).toBeInTheDocument();
 
     fireEvent.click(typeFilter('Track Limits'));
 
-    expect(screen.getByText(trackLimits.timestampLabel)).toBeInTheDocument();
+    expect(
+      screen.queryByText(trackLimits.timestampLabel),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(aContact.timestampLabel)).toBeInTheDocument();
+    expect(
+      screen.getByText(`All ${liveIncidentsFixture.length - 1}`),
+    ).toBeInTheDocument();
+  });
+
+  // Any number of kinds can be out at once, which one-of-many could not do.
+  it('should take several classifications out together', () => {
+    renderLive();
+
+    fireEvent.click(typeFilter('Track Limits'));
+    fireEvent.click(typeFilter('Contact'));
+
+    expect(
+      screen.queryByText(trackLimits.timestampLabel),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(aContact.timestampLabel)).not.toBeInTheDocument();
-    expect(screen.getByText('All 1')).toBeInTheDocument();
   });
 
   it('should clear the filter when the active chip is clicked again', () => {
@@ -119,17 +137,22 @@ describe('live incident quick filters', () => {
     expect(screen.getByText('Needs Attention')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Incidents'));
 
-    expect(screen.getByText('All 1')).toBeInTheDocument();
-    expect(screen.queryByText(aContact.timestampLabel)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(`All ${liveIncidentsFixture.length - 1}`),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(trackLimits.timestampLabel),
+    ).not.toBeInTheDocument();
   });
 
   it('should say so when the filters, not the session, emptied the queue', () => {
     renderLive();
 
-    fireEvent.click(typeFilter('Track Limits'));
-    // A track-limit element carries no magnitude, so this pair cannot match.
-    fireEvent.mouseDown(screen.getByLabelText('Magnitude'));
-    fireEvent.click(screen.getByRole('option', { name: '2000+' }));
+    // Every kind the session produced, switched off one by one.
+    within(screen.getByRole('group', { name: 'Incident type' }))
+      .getAllByRole('button')
+      .filter((chip) => chip.textContent !== 'All')
+      .forEach((chip) => fireEvent.click(chip));
 
     expect(
       screen.getByText(new RegExp(`${liveIncidentsFixture.length} hidden`)),

@@ -253,9 +253,11 @@ const tariffLabels = (): string[] =>
     .getAllByRole('button')
     .map((button) => button.textContent ?? '')
     .filter((text) =>
-      [...LEAGUE_TARIFF, { label: '5s Penalty' }, { label: 'No Action' }].some(
-        (action) => text.startsWith(action.label),
-      ),
+      [
+        ...LEAGUE_TARIFF,
+        { label: '5s penalty' },
+        { label: 'Racing incident: No investigation necessary' },
+      ].some((action) => text.startsWith(action.label)),
     );
 
 /* ----------------------------------------------------------------- tests */
@@ -270,7 +272,7 @@ describe('the tariff a dossier offers', () => {
       '30s + 2 Points2',
       'Racing Incident3',
     ]);
-    expect(screen.queryByRole('button', { name: /5s Penalty/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /5s penalty/ })).toBeNull();
   });
 
   it('should be the configured one, in the replay dossier', () => {
@@ -282,7 +284,7 @@ describe('the tariff a dossier offers', () => {
       '30s + 2 Points2',
       'Racing Incident3',
     ]);
-    expect(screen.queryByRole('button', { name: /5s Penalty/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /5s penalty/ })).toBeNull();
   });
 
   /*
@@ -310,10 +312,10 @@ describe('the tariff a dossier offers', () => {
     applySettings(null);
 
     expect(
-      screen.getByRole('button', { name: /5s Penalty/ }),
+      screen.getByRole('button', { name: /5s penalty/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Note Only/ }),
+      screen.getByRole('button', { name: /Under investigation/ }),
     ).toBeInTheDocument();
   });
 });
@@ -360,7 +362,7 @@ describe('a call written under a configured action', () => {
   });
 
   // An incident-scoped action needs no target, exactly as the shipped set's
-  // "No Action" did — which is what makes the flag worth configuring.
+  // "Racing incident: No investigation necessary" did — which is what makes the flag worth configuring.
   it('should allow a configured incident-scoped action with no driver named', () => {
     renderLiveTariff();
     applySettings(LEAGUE_TARIFF);

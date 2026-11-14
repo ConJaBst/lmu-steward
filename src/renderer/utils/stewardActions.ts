@@ -48,7 +48,23 @@ export interface StewardAction {
    * user-defined penalty that skipped this would reintroduce it.
    */
   driverScoped: boolean;
+  /**
+   * What the in-game chat calls this action, when that should differ from the
+   * label.
+   *
+   * Optional, and absent means "say the label". It exists because a record and
+   * a chat line want different things from the same action: the record keeps
+   * `Racing incident: No investigation necessary` in full, while a chat line
+   * that goes on to name the drivers reads better as `Racing Incident`.
+   *
+   * Like `id`, it never reaches a decision record — the label does.
+   */
+  chatLabel?: string;
 }
+
+/** What the chat line says for this action. */
+export const stewardActionChatLabel = (action: StewardAction): string =>
+  action.chatLabel?.trim() || action.label;
 
 /**
  * The shipped tariff, and the only copy of it.
@@ -58,19 +74,42 @@ export interface StewardAction {
  * customised.
  */
 export const DEFAULT_STEWARD_ACTIONS: readonly StewardAction[] = [
-  { id: 'sa-5s', label: '5s Penalty', driverScoped: true },
-  { id: 'sa-10s', label: '10s Penalty', driverScoped: true },
-  { id: 'sa-drive-through', label: 'Drive-Through', driverScoped: true },
-  { id: 'sa-no-action', label: 'No Action', driverScoped: false },
-  { id: 'sa-note', label: 'Note Only', driverScoped: false },
+  {
+    id: 'sa-racing-incident',
+    label: 'Racing incident: No investigation necessary',
+    driverScoped: false,
+    chatLabel: 'Racing Incident',
+  },
+  {
+    id: 'sa-under-investigation',
+    label: 'Under investigation',
+    driverScoped: false,
+    chatLabel: 'Under Investigation',
+  },
+  { id: 'sa-5s', label: '5s penalty', driverScoped: true },
+  { id: 'sa-10s', label: '10s penalty', driverScoped: true },
+  { id: 'sa-20s', label: '20s penalty', driverScoped: true },
+  { id: 'sa-drive-through', label: 'Drive Through', driverScoped: true },
+  { id: 'sa-disqualified', label: 'Disqualified', driverScoped: true },
 ];
 
 /**
- * A label has to fit a button in a three-column dossier and a spreadsheet cell.
- * Long enough for "Drive-Through + 2 Points", short enough that the tariff row
- * does not wrap to four lines.
+ * What "Resolve quietly" records.
+ *
+ * Not part of the tariff, and not configurable: it is not a call anybody needs
+ * to hear about. It closes an incident the steward has looked at and has
+ * nothing to say on — no chat line, and the incident leaves the triage queue.
+ * It is still an ordinary decision record, so it is kept, exported and can be
+ * taken back like any other.
  */
-export const MAX_STEWARD_ACTION_LABEL_LENGTH = 40;
+export const RESOLVED_QUIETLY_OUTCOME = 'Resolved quietly';
+
+/**
+ * A label has to fit a button in a three-column dossier and a spreadsheet cell.
+ * Long enough for "Racing incident: No investigation necessary", short enough
+ * that the tariff row does not wrap to four lines.
+ */
+export const MAX_STEWARD_ACTION_LABEL_LENGTH = 60;
 
 /**
  * How many actions get a number key. `1`–`9`; a tenth action is still clickable.
@@ -133,9 +172,20 @@ const sanitizeStewardActions = (value: unknown): StewardAction[] => {
         : `sa-stored-${index}`;
     seenIds.add(id);
 
+    /*
+      Kept only when it says something the label does not. An empty chat label,
+      or one that repeats the label, is the same thing as none — and storing it
+      would make an untouched row compare unequal to the shipped one.
+    */
+    const chatLabel =
+      typeof entry.chatLabel === 'string'
+        ? entry.chatLabel.trim().slice(0, MAX_STEWARD_ACTION_LABEL_LENGTH)
+        : '';
+
     actions.push({
       id,
       label,
+      ...(chatLabel && chatLabel !== label ? { chatLabel } : {}),
       /*
         Defaults to a call against a driver when the stored value is not a
         boolean. The safe direction: an action wrongly marked driver-scoped asks
@@ -158,7 +208,9 @@ export const areStewardActionsDefault = (
     (action, index) =>
       labelKey(action.label) ===
         labelKey(DEFAULT_STEWARD_ACTIONS[index].label) &&
-      action.driverScoped === DEFAULT_STEWARD_ACTIONS[index].driverScoped,
+      action.driverScoped === DEFAULT_STEWARD_ACTIONS[index].driverScoped &&
+      stewardActionChatLabel(action) ===
+        stewardActionChatLabel(DEFAULT_STEWARD_ACTIONS[index]),
   );
 
 /**

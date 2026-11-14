@@ -214,8 +214,27 @@ export interface LivePriorCall {
   decidedAt: number;
 }
 
+/**
+ * How the triage queue is ordered inside each state group.
+ *
+ * `newest` is the default: during a session the incident a steward needs is
+ * almost always the one that just happened. `biggest` puts the heaviest contact
+ * first, for going back through a session looking for the ones that mattered.
+ */
+export type LiveIncidentSort = 'newest' | 'biggest';
+
+export const DEFAULT_LIVE_INCIDENT_SORT: LiveIncidentSort = 'newest';
+
 export interface LiveIncidentFilters {
-  classification: LiveIncidentClassification | 'ALL';
+  /**
+   * The kinds of incident taken *out* of the queue. Empty shows everything.
+   *
+   * A list of what is hidden rather than one kind that is shown: the working
+   * question is "stop showing me track limits and spins", which is several
+   * kinds at once, and a kind the session has not produced yet should appear
+   * when it does rather than be excluded by a choice made before it existed.
+   */
+  hiddenClassifications: LiveIncidentClassification[];
   /** A class code as `CarClassBadge` renders it, or `ALL`. */
   carClass: string;
   /** A party's identity key, or `ALL`. */
@@ -225,7 +244,7 @@ export interface LiveIncidentFilters {
 }
 
 export const DEFAULT_LIVE_INCIDENT_FILTERS: LiveIncidentFilters = {
-  classification: 'ALL',
+  hiddenClassifications: [],
   carClass: 'ALL',
   driverSteamId: 'ALL',
   minMagnitude: 0,
@@ -242,10 +261,7 @@ export const matchesLiveIncidentFilters = (
   incident: LiveIncident,
   filters: LiveIncidentFilters,
 ): boolean => {
-  if (
-    filters.classification !== 'ALL' &&
-    incident.classification !== filters.classification
-  ) {
+  if (filters.hiddenClassifications.includes(incident.classification)) {
     return false;
   }
   if (
@@ -277,7 +293,7 @@ export const matchesLiveIncidentFilters = (
 export const hasActiveLiveIncidentFilters = (
   filters: LiveIncidentFilters,
 ): boolean =>
-  filters.classification !== 'ALL' ||
+  filters.hiddenClassifications.length > 0 ||
   filters.carClass !== 'ALL' ||
   filters.driverSteamId !== 'ALL' ||
   filters.minMagnitude > 0;

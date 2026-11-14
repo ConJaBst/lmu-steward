@@ -208,6 +208,10 @@ export const CONSTANTS = {
     POST_EXPORT_SESSION_DATA: 'post.export-session-data',
     GET_STEWARD_DECISIONS: 'get.steward-decisions',
     POST_STEWARD_DECISION: 'post.steward-decision',
+    /** Post one line to the in-game chat. Multiplayer only. */
+    POST_STEWARD_CHAT_MESSAGE: 'post.steward-chat-message',
+    /** The session's in-game chat so far. Empty outside multiplayer. */
+    GET_STEWARD_CHAT_MESSAGES: 'get.steward-chat-messages',
     PUSH_IMPORT_PROGRESS: 'push.import-progress',
     PUSH_EXPORT_PROGRESS: 'push.export-progress',
   },

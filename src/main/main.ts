@@ -52,6 +52,11 @@ import {
   postStewardDecisionHandler,
 } from './api/steward-decisions';
 import {
+  StewardChatMessageRequest,
+  getStewardChatMessages,
+  postStewardChatMessage,
+} from './api/steward-chat';
+import {
   getReplays,
   getIsReplayActive,
   postArchiveNote,
@@ -329,6 +334,11 @@ const CHANNEL_CALLBACK_HANDLERS: Partial<
   [CONSTANTS.API.POST_STEWARD_DECISION]: withEventAndData<StewardDecision>(
     postStewardDecisionHandler,
   ),
+  [CONSTANTS.API.GET_STEWARD_CHAT_MESSAGES]: withEventOnly(
+    getStewardChatMessages,
+  ),
+  [CONSTANTS.API.POST_STEWARD_CHAT_MESSAGE]:
+    withEventAndData<StewardChatMessageRequest>(postStewardChatMessage),
   [CONSTANTS.API.POST_SELECT_IMPORT_FILE]:
     withEventAndData<SelectImportFileRequest>(postSelectImportFile),
   [CONSTANTS.API.POST_VALIDATE_IMPORT_PAIR]:

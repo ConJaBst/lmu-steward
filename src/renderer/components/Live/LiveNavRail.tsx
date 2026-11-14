@@ -8,6 +8,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
@@ -35,6 +36,12 @@ export const LIVE_NAV_ITEMS: LiveNavItem[] = [
     label: 'Overview',
     icon: <SpaceDashboardOutlinedIcon fontSize="small" />,
     hint: 'Session at a glance',
+  },
+  {
+    to: '/live/steward',
+    label: 'Steward',
+    icon: <GavelOutlinedIcon fontSize="small" />,
+    hint: 'Live steward: incidents, with timing and the map between them',
   },
   {
     to: '/live/incidents',

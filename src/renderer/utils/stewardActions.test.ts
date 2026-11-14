@@ -180,7 +180,10 @@ describe('areStewardActionsDefault', () => {
   it('should be false once a driver scope is changed', () => {
     expect(
       areStewardActionsDefault([
-        { ...DEFAULT_STEWARD_ACTIONS[0], driverScoped: false },
+        {
+          ...DEFAULT_STEWARD_ACTIONS[0],
+          driverScoped: !DEFAULT_STEWARD_ACTIONS[0].driverScoped,
+        },
         ...DEFAULT_STEWARD_ACTIONS.slice(1),
       ]),
     ).toBe(false);
@@ -252,10 +255,15 @@ describe('isDriverScopedOutcome', () => {
   it('should hold for the shipped tariff', () => {
     const shipped = [...DEFAULT_STEWARD_ACTIONS];
 
-    expect(isDriverScopedOutcome(shipped, '5s Penalty')).toBe(true);
-    expect(isDriverScopedOutcome(shipped, 'Drive-Through')).toBe(true);
-    expect(isDriverScopedOutcome(shipped, 'No Action')).toBe(false);
-    expect(isDriverScopedOutcome(shipped, 'Note Only')).toBe(false);
+    expect(isDriverScopedOutcome(shipped, '5s penalty')).toBe(true);
+    expect(isDriverScopedOutcome(shipped, 'Drive Through')).toBe(true);
+    expect(
+      isDriverScopedOutcome(
+        shipped,
+        'Racing incident: No investigation necessary',
+      ),
+    ).toBe(false);
+    expect(isDriverScopedOutcome(shipped, 'Under investigation')).toBe(false);
   });
 });
 

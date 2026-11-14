@@ -19,7 +19,10 @@ import {
   hasActiveLiveIncidentFilters,
   liveClassificationLabel,
   matchesLiveIncidentFilters,
+  DEFAULT_LIVE_INCIDENT_SORT,
+  LiveIncidentSort,
 } from './liveFixtures';
+import { RESOLVED_QUIETLY_OUTCOME } from '../../utils/stewardActions';
 
 const classificationColor: Record<
   LiveIncidentClassification,
@@ -70,6 +73,10 @@ const emptyStateCounts = (): Record<LiveIncidentState, number> => ({
 
 const severityOf = (incident: LiveIncident): number =>
   incident.contactMagnitude ?? 0;
+
+const isResolvedQuietly = (incident: LiveIncident): boolean =>
+  incident.state === 'DECIDED' &&
+  incident.decision === RESOLVED_QUIETLY_OUTCOME;
 
 const severityTone = (incident: LiveIncident): string => {
   const magnitude = severityOf(incident);
@@ -218,6 +225,8 @@ interface LiveTriageQueueProps {
    * sixty rows that happen to be mounted.
    */
   filters: LiveIncidentFilters;
+  /** Order inside each state group. Defaults to newest first. */
+  sort?: LiveIncidentSort;
   onSelectIncident: (incidentId: string) => void;
   onChangeStateFilter: (next: LiveIncidentState | 'ALL') => void;
   /** Offered when the filters have emptied the list, so it is one click out. */
@@ -229,6 +238,7 @@ export const LiveTriageQueue: React.FC<LiveTriageQueueProps> = ({
   selectedIncidentId,
   stateFilter,
   filters,
+  sort = DEFAULT_LIVE_INCIDENT_SORT,
   onSelectIncident,
   onChangeStateFilter,
   onClearFilters,
@@ -239,6 +249,19 @@ export const LiveTriageQueue: React.FC<LiveTriageQueueProps> = ({
         matchesLiveIncidentFilters(incident, filters),
       ),
     [filters, incidents],
+  );
+
+  /*
+    Everything except what the steward resolved quietly. That is the point of
+    the button: the incident is dealt with and should stop taking up a row.
+
+    It is not gone. It is still a decided incident, still counted under
+    Decided, and choosing that chip lists it — which is the way back to one
+    resolved by mistake.
+  */
+  const listed = useMemo(
+    () => matching.filter((incident) => !isResolvedQuietly(incident)),
+    [matching],
   );
 
   /*
@@ -257,7 +280,7 @@ export const LiveTriageQueue: React.FC<LiveTriageQueueProps> = ({
 
   const visible = useMemo(
     () =>
-      matching
+      (stateFilter === 'DECIDED' ? matching : listed)
         .filter((i) => (stateFilter === 'ALL' ? true : i.state === stateFilter))
         .sort((a, b) => {
           const stateDelta =
@@ -265,9 +288,17 @@ export const LiveTriageQueue: React.FC<LiveTriageQueueProps> = ({
           if (stateDelta !== 0) {
             return stateDelta;
           }
-          return severityOf(b) - severityOf(a);
+          /*
+            Inside a state group. Newest first unless asked otherwise; the
+            other key breaks ties, so two contacts of equal force still read
+            latest-first and two incidents in the same second read
+            heaviest-first.
+          */
+          const newer = b.etSeconds - a.etSeconds;
+          const bigger = severityOf(b) - severityOf(a);
+          return sort === 'biggest' ? bigger || newer : newer || bigger;
         }),
-    [matching, stateFilter],
+    [listed, matching, sort, stateFilter],
   );
 
   const filtersActive = hasActiveLiveIncidentFilters(filters);
@@ -341,7 +372,7 @@ export const LiveTriageQueue: React.FC<LiveTriageQueueProps> = ({
       >
         <Chip
           size="small"
-          label={`All ${matching.length}`}
+          label={`All ${listed.length}`}
           clickable
           aria-pressed={stateFilter === 'ALL'}
           variant={stateFilter === 'ALL' ? 'filled' : 'outlined'}
