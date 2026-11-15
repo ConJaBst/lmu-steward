@@ -69,6 +69,7 @@ let stdoutBuffer = '';
 let drivers: LiveCaptureDriver[] = [];
 let incidents: LiveCaptureIncident[] = [];
 let trackLimitStepsPerPenalty: number | undefined;
+let trackLimitStepsPerPoint: number | undefined;
 let incidentSequence = 0;
 let sessionKey = '';
 let sessionRaw = 0;
@@ -326,6 +327,12 @@ const applyStatus = (parsed: Record<string, unknown>) => {
   const steps = Number(parsed.trackLimitStepsPerPenalty);
   trackLimitStepsPerPenalty =
     Number.isFinite(steps) && steps > 0 ? steps : undefined;
+  // Absent from a capture process built before it was added to the output.
+  const stepsPerPoint = Number(parsed.trackLimitStepsPerPoint);
+  trackLimitStepsPerPoint =
+    Number.isFinite(stepsPerPoint) && stepsPerPoint > 0
+      ? stepsPerPoint
+      : undefined;
 
   const length = Number(parsed.trackLength);
   if (Number.isFinite(length) && length > 0) {
@@ -855,6 +862,7 @@ export const getLiveSessionData = (): LiveSessionData => {
     drivers,
     incidents: incidents.map(withoutContext),
     trackLimitStepsPerPenalty,
+    trackLimitStepsPerPoint,
     // Derived on read rather than cached: it is a pure function of the standings
     // the renderer is already polling for, and it goes stale within a tick.
     battles: deriveLivePressureBattles(drivers, trackLengthMetres),

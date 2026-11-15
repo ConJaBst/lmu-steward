@@ -6,6 +6,7 @@ import {
   LiveSessionData,
   SessionType,
 } from '@types';
+import { trackLimitPointsLimit } from '../utils/trackLimits';
 import { sendMessage } from '../utils/postMessage';
 import { useApi } from '../providers/ApiContext';
 import {
@@ -218,6 +219,10 @@ const classifyIncident = (
 ): LiveIncidentClassification => {
   if (incident.kind === 'track-limits') {
     return 'track-limits';
+  }
+  // Its own kind: a penalty is not a contact, and used to be listed as one.
+  if (incident.kind === 'penalty') {
+    return 'penalty';
   }
   if (incident.objectStruck && incident.objectStruck !== 'another vehicle') {
     return 'loss-of-control';
@@ -445,6 +450,17 @@ const buildIncident = (
     // Fault is the steward's call, never the app's.
     atFaultSteamId: undefined,
     rawText: incident.raw.replace(/<[^>]*>/g, '').trim(),
+    trackLimit:
+      incident.kind === 'track-limits'
+        ? {
+            added: incident.warningPoints ?? 0,
+            current: incident.currentPoints,
+          }
+        : undefined,
+    penalty:
+      incident.kind === 'penalty'
+        ? { type: incident.penaltyType, reason: incident.penaltyReason }
+        : undefined,
     // Lifted onto the incident by capture so it survives the context strip;
     // the fallback is for fixtures and anything still carrying a full window.
     anchorErrorSeconds:
@@ -482,6 +498,35 @@ const buildIncident = (
   };
 };
 
+/**
+ * Whether a captured event belongs in the steward's queue at all.
+ *
+ * Two kinds of message are dropped here, before anything is built:
+ *
+ *   - **A track-limit message that added no points.** The game warns a driver
+ *     the moment they go off, and only adds points afterwards if they do not
+ *     give the advantage back. The forgiven ones arrive as the same element
+ *     with `WarningPoints="0"` and "No Further Action" — a non-event, and on a
+ *     busy server most of the traffic. A message with no points figure at all
+ *     is kept: that is a capture too old to say, not a zero.
+ *   - **A penalty message with no driver.** The game follows every penalty with
+ *     "served" and "finished before serving" notes that name nobody in a way
+ *     this can use. The penalty itself is the incident.
+ *
+ * The per-driver tallies deliberately still read the unfiltered list: a
+ * forgiven off carries the driver's current total, and that total is the
+ * freshest reading there is.
+ */
+export const isStewardWorthy = (incident: LiveCaptureIncident): boolean => {
+  if (incident.kind === 'track-limits') {
+    return incident.warningPoints === undefined || incident.warningPoints > 0;
+  }
+  if (incident.kind === 'penalty') {
+    return incident.parties.length > 0;
+  }
+  return true;
+};
+
 export const buildIncidents = (
   captured: LiveCaptureIncident[],
   drivers: LiveCaptureDriver[],
@@ -489,7 +534,8 @@ export const buildIncidents = (
   const bySlot = new Map<number, LiveCaptureDriver>();
   drivers.forEach((driver) => bySlot.set(driver.slotId, driver));
 
-  return [...captured]
+  return captured
+    .filter(isStewardWorthy)
     .sort((a, b) => b.etSeconds - a.etSeconds)
     .map((incident) => buildIncident(incident, bySlot));
 };
@@ -563,9 +609,10 @@ export const buildIncidentsCached = (
   // Rebuilt rather than pruned, so an incident that has left the queue — a
   // session change clears it — cannot keep its entry alive forever.
   const byId = new Map<string, { revision: string; built: LiveIncident }>();
-  let changed = captured.length !== cache.last.length || previous === undefined;
+  const worthy = captured.filter(isStewardWorthy);
+  let changed = worthy.length !== cache.last.length || previous === undefined;
 
-  const built = [...captured]
+  const built = worthy
     .sort((a, b) => b.etSeconds - a.etSeconds)
     .map((incident, index) => {
       const id = incident.persistedId ?? incident.id;
@@ -633,6 +680,10 @@ export const buildSessionState = (
     timeRemainingSeconds: data.status.timeRemainingSeconds ?? 0,
     lapsCompleted: Math.max(0, ...data.drivers.map((d) => d.lapsCompleted), 0),
     trackLimitStepsPerPenalty: data.trackLimitStepsPerPenalty ?? 0,
+    trackLimitPointsLimit: trackLimitPointsLimit(
+      data.trackLimitStepsPerPenalty,
+      data.trackLimitStepsPerPoint,
+    ),
     connected: true,
     /*
       Passed through undefined-and-all: a sidecar built before Step 3 sends

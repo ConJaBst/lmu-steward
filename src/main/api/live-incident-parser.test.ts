@@ -125,3 +125,34 @@ describe('parseStewardEvent', () => {
     expect(incident.magnitude).toBeUndefined();
   });
 });
+
+describe('a penalty the game gave', () => {
+  it('should name the driver, the penalty and the reason', () => {
+    const parsed = parseStewardEvent(
+      '<Penalty Driver="Bradley Drake" ID="9" Penalty="Stop/Go" Time="100" Laps="0" Reason="Speeding In Pitlane" et="50.0">issued</Penalty>',
+      'penalty',
+      50,
+      'pen-1',
+    );
+
+    expect(parsed.kind).toBe('penalty');
+    expect(parsed.parties).toEqual([
+      { displayName: 'Bradley Drake', slotId: 9 },
+    ]);
+    expect(parsed.penaltyType).toBe('Stop/Go');
+    expect(parsed.penaltyReason).toBe('Speeding In Pitlane');
+  });
+
+  // The follow-ups carry no attributes; no party is how they are told apart.
+  it('should give a follow-up note no driver', () => {
+    const parsed = parseStewardEvent(
+      '<Penalty et="51.0">Bradley Drake served 1st Stop/Go penalty</Penalty>',
+      'penalty',
+      51,
+      'pen-2',
+    );
+
+    expect(parsed.parties).toEqual([]);
+    expect(parsed.penaltyType).toBeUndefined();
+  });
+});

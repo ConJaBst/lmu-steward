@@ -24,6 +24,7 @@ import { RESOLVED_QUIETLY_OUTCOME } from '../../utils/stewardActions';
 export const LiveIncidents: React.FC = () => {
   const {
     incidents,
+    session,
     segments,
     activeSessionKey,
     sessionKey,
@@ -127,6 +128,7 @@ export const LiveIncidents: React.FC = () => {
         stateFilter={stateFilter}
         filters={incidentFilters}
         sort={incidentSort}
+        trackLimitPointsLimit={session.trackLimitPointsLimit}
         onSelectIncident={onSelectIncident}
         onChangeStateFilter={onChangeStateFilter}
         onClearFilters={onResetIncidentFilters}

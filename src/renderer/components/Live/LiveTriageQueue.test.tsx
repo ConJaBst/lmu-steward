@@ -339,3 +339,64 @@ describe('LiveTriageQueue order', () => {
     });
   });
 });
+
+describe('what a row says about its incident', () => {
+  const row = (over: Partial<LiveIncident>): LiveIncident => ({
+    ...buildLiveIncidentsFixture(1)[0],
+    id: 'row',
+    timestampLabel: 'T-row',
+    contactMagnitude: undefined,
+    state: 'NEW',
+    decision: undefined,
+    ...over,
+  });
+
+  const renderRow = (incident: LiveIncident, limit?: number) =>
+    render(
+      <LiveTriageQueue
+        incidents={[incident]}
+        stateFilter="ALL"
+        filters={DEFAULT_LIVE_INCIDENT_FILTERS}
+        trackLimitPointsLimit={limit}
+        onSelectIncident={noop}
+        onChangeStateFilter={noop}
+      />,
+    );
+
+  it('should show track-limit points out of the penalty limit', () => {
+    renderRow(
+      row({
+        classification: 'track-limits',
+        trackLimit: { added: 1, current: 2.25 },
+      }),
+      4,
+    );
+
+    expect(screen.getByText('2.25 / 4 points (+1)')).toBeInTheDocument();
+  });
+
+  it('should show the points alone when the limit is not known', () => {
+    renderRow(
+      row({
+        classification: 'track-limits',
+        trackLimit: { added: 0.5, current: 1.5 },
+      }),
+    );
+
+    expect(screen.getByText('1.5 points (+0.5)')).toBeInTheDocument();
+  });
+
+  it('should label a game penalty as a penalty, with what it was for', () => {
+    renderRow(
+      row({
+        classification: 'penalty',
+        penalty: { type: 'Stop/Go', reason: 'Speeding In Pitlane' },
+      }),
+    );
+
+    expect(screen.getByText('Penalty')).toBeInTheDocument();
+    expect(
+      screen.getByText('Stop/Go · Speeding In Pitlane'),
+    ).toBeInTheDocument();
+  });
+});

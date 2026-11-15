@@ -1046,7 +1046,8 @@ void EmitStatusJson() {
       "{\"type\":\"status\",\"state\":\"%s\",\"trackName\":\"%s\",\"sessionType\":\"%s\","
       "\"session\":%ld,\"currentEt\":%.3f,"
       "\"driverCount\":%ld,\"timeRemainingSeconds\":%.0f,\"gamePhase\":%u,"
-      "\"trackLimitStepsPerPenalty\":%u,\"trackLength\":%.1f,"
+      "\"trackLimitStepsPerPenalty\":%u,\"trackLimitStepsPerPoint\":%u,"
+      "\"trackLength\":%.1f,"
       "\"sectorFlags\":[%d,%d,%d],\"etClockDelta\":%.3f,\"bufferedSeconds\":%.1f,"
       // Session conditions. Emitted raw, sentinels and all: what counts as an
       // absent value is decided once, in applyStatus, rather than twice.
@@ -1065,6 +1066,7 @@ void EmitStatusJson() {
       scoring.mSessionTimeRemaining,
       static_cast<unsigned>(scoring.mGamePhase),
       static_cast<unsigned>(scoring.mTrackLimitsStepsPerPenalty),
+      static_cast<unsigned>(scoring.mTrackLimitsStepsPerPoint),
       scoring.mLapDist,
       static_cast<int>(scoring.mSectorFlag[0]),
       static_cast<int>(scoring.mSectorFlag[1]),

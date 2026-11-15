@@ -27,7 +27,9 @@ export type LiveIncidentClassification =
   | 'track-limits'
   | 'blue-flag'
   | 'unsafe-rejoin'
-  | 'loss-of-control';
+  | 'loss-of-control'
+  /** A penalty the game itself gave — speeding in the pits, a cut too far. */
+  | 'penalty';
 
 /**
  * Fixed order for anything that lists classifications, so a chip row does not
@@ -39,6 +41,7 @@ export const LIVE_INCIDENT_CLASSIFICATIONS: LiveIncidentClassification[] = [
   'loss-of-control',
   'unsafe-rejoin',
   'blue-flag',
+  'penalty',
 ];
 
 /** Shared so the queue, the overview and the filter bar cannot drift apart. */
@@ -51,6 +54,7 @@ export const liveClassificationLabel: Record<
   'blue-flag': 'Blue Flag',
   'unsafe-rejoin': 'Unsafe Rejoin',
   'loss-of-control': 'Loss of Control',
+  penalty: 'Penalty',
 };
 
 /**
@@ -175,6 +179,14 @@ export interface LiveIncident {
   state: LiveIncidentState;
   decision?: LiveDecisionOutcome;
   decisionReasoning?: string;
+  /**
+   * Track limits only: the points this incident added, and the driver's
+   * running total straight after it. An incident that added nothing is never
+   * built — the game sends those for an off it then forgave.
+   */
+  trackLimit?: { added: number; current?: number };
+  /** Game-given penalties only: what it was and why, in the game's words. */
+  penalty?: { type?: string; reason?: string };
 }
 
 /**
@@ -436,6 +448,11 @@ export interface LiveSessionState {
   timeRemainingSeconds: number;
   lapsCompleted: number;
   trackLimitStepsPerPenalty: number;
+  /**
+   * Track-limit points at which the game gives a penalty; see
+   * `utils/trackLimits.ts`. Absent when the game has not said.
+   */
+  trackLimitPointsLimit?: number;
   connected: boolean;
 
   /*
@@ -515,7 +532,8 @@ export const liveSessionFixture: LiveSessionState = {
   phase: 'green',
   timeRemainingSeconds: 4359,
   lapsCompleted: 41,
-  trackLimitStepsPerPenalty: 4,
+  trackLimitStepsPerPenalty: 16,
+  trackLimitPointsLimit: 4,
   connected: true,
   // 14:42:05, matching the header ordering the mockups settle on.
   timeOfDay: 52925,

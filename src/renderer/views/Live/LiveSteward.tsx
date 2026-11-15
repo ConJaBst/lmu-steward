@@ -42,6 +42,7 @@ export const LiveSteward: React.FC = () => {
   const { liveAutoReplayMinMagnitude } = useApi();
   const {
     incidents,
+    session,
     standings,
     battles,
     trackMap,
@@ -173,6 +174,7 @@ export const LiveSteward: React.FC = () => {
         stateFilter={stateFilter}
         filters={incidentFilters}
         sort={incidentSort}
+        trackLimitPointsLimit={session.trackLimitPointsLimit}
         onSelectIncident={onSelectIncident}
         onChangeStateFilter={onChangeStateFilter}
         onClearFilters={onResetIncidentFilters}
