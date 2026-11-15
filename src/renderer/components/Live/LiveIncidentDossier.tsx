@@ -3,6 +3,7 @@ import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
 import FlagIcon from '@mui/icons-material/Flag';
 import HistoryIcon from '@mui/icons-material/History';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import {
   Box,
   Button,
@@ -19,8 +20,15 @@ import { AiBadge } from '../Common/AiBadge';
 import { StatDisplay } from '../Common/StatDisplay';
 import { useLiveIncidentContext } from '../../hooks/useLiveIncidentContext';
 import { useApi } from '../../providers/ApiContext';
-import { stewardActionShortcut } from '../../utils/stewardActions';
+import {
+  RESOLVED_QUIETLY_OUTCOME,
+  stewardActionShortcut,
+} from '../../utils/stewardActions';
 import { LiveIncidentTraceChart } from './LiveIncidentTraceChart';
+import {
+  LiveCustomDecision,
+  LiveCustomDecisionCall,
+} from './LiveCustomDecision';
 import { LiveIncident, LiveIncidentTrace, LivePriorCall } from './liveFixtures';
 
 /**
@@ -337,6 +345,20 @@ interface LiveIncidentDossierProps {
    */
   onDefer?: (incidentId: string) => void;
   onDecide: (incidentId: string, outcome: string) => void;
+  /**
+   * Closes the incident with nothing said: no chat line, and it leaves the
+   * triage queue. Optional and absent means the button is not drawn — the
+   * replay dossier has no queue for it to leave.
+   */
+  onResolveQuietly?: (incidentId: string) => void;
+  /**
+   * Records a call assembled by hand: its own driver, penalty and reason.
+   *
+   * Optional and absent means the Custom button is not drawn. The replay
+   * dossier passes nothing — its decide path revises a record under a prompt,
+   * and has no one-shot form to hang this on.
+   */
+  onDecideCustom?: (incidentId: string, call: LiveCustomDecisionCall) => void;
   /** Which driver a penalty would be assigned to. */
   targetSteamId?: string;
   onSelectTarget: (steamId: string) => void;
@@ -381,6 +403,8 @@ export const LiveIncidentDossier: React.FC<LiveIncidentDossierProps> = ({
   onFlag,
   onDefer,
   onDecide,
+  onResolveQuietly,
+  onDecideCustom,
   targetSteamId,
   onSelectTarget,
   priorCallsByDriver,
@@ -927,6 +951,14 @@ export const LiveIncidentDossier: React.FC<LiveIncidentDossierProps> = ({
               </Button>
             );
           })}
+          {onDecideCustom ? (
+            <LiveCustomDecision
+              incident={incident}
+              actions={stewardActions}
+              defaultSteamId={targetDriver?.steamId}
+              onSubmit={(call) => onDecideCustom(incident.id, call)}
+            />
+          ) : null}
         </Stack>
         {/*
           Two ways of not deciding, kept apart on purpose. A flag is a promise
@@ -969,6 +1001,31 @@ export const LiveIncidentDossier: React.FC<LiveIncidentDossierProps> = ({
                 D
               </Typography>
             </Button>
+          ) : null}
+          {/*
+            The third way of being done with an incident, and the only one that
+            says nothing: no chat line, and the row leaves the queue. A toggle
+            like the two beside it — pressing it again brings the incident back.
+          */}
+          {onResolveQuietly ? (
+            <Tooltip
+              describeChild
+              title="Closes this incident without posting to chat and takes it off the list. It stays under Decided, where pressing this again brings it back."
+            >
+              <Button
+                size="small"
+                variant={
+                  incident.decision === RESOLVED_QUIETLY_OUTCOME
+                    ? 'contained'
+                    : 'outlined'
+                }
+                color="inherit"
+                startIcon={<VisibilityOffOutlinedIcon />}
+                onClick={() => onResolveQuietly(incident.id)}
+              >
+                Resolve quietly
+              </Button>
+            </Tooltip>
           ) : null}
         </Stack>
       </Stack>

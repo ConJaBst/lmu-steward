@@ -15,6 +15,11 @@ jest.mock('../utils/postMessage', () => ({
   sendMessage: jest.fn(),
 }));
 
+// Its own concern, with its own channels; not what this file is about.
+jest.mock('../components/UserSettings/SimgridConnectorSettings', () => ({
+  SimgridConnectorSettings: () => null,
+}));
+
 jest.mock('../components/Common/ViewHeader', () => ({
   ViewHeader: ({
     title,
@@ -178,6 +183,9 @@ describe('UserSettingsView integration', () => {
         liveCaptureEnabled: false,
         stewardAuthorName: '',
         stewardActions: null,
+        stewardAnnouncementMessage: '',
+        liveAutoReplayMinMagnitude: 200,
+        liveChatFeedVisibleSeconds: 15,
         anonymizeDriverData: false,
         telemetryCacheEnabled: true,
         clearCacheOnExit: false,
@@ -289,6 +297,9 @@ describe('UserSettingsView integration', () => {
         liveCaptureEnabled: false,
         stewardAuthorName: '',
         stewardActions: null,
+        stewardAnnouncementMessage: '',
+        liveAutoReplayMinMagnitude: 200,
+        liveChatFeedVisibleSeconds: 15,
         anonymizeDriverData: false,
         telemetryCacheEnabled: true,
         clearCacheOnExit: false,
@@ -457,8 +468,10 @@ describe('UserSettingsView integration', () => {
       renderView();
       hydrate(undefined);
 
-      expect(labelField(1).value).toBe('5s Penalty');
-      expect(labelField(5).value).toBe('Note Only');
+      expect(labelField(1).value).toBe(
+        'Racing incident: No investigation necessary',
+      );
+      expect(labelField(7).value).toBe('Disqualified');
     });
 
     it('hydrates a stored tariff instead', () => {
@@ -495,15 +508,19 @@ describe('UserSettingsView integration', () => {
       renderView();
       hydrate(undefined);
 
-      fireEvent.change(labelField(1), { target: { value: '5 Second' } });
+      fireEvent.change(labelField(3), { target: { value: '5 Second' } });
       settle();
 
       expect(lastPostedActions()).toEqual([
+        expect.objectContaining({
+          label: 'Racing incident: No investigation necessary',
+        }),
+        expect.objectContaining({ label: 'Under investigation' }),
         expect.objectContaining({ label: '5 Second', driverScoped: true }),
-        expect.objectContaining({ label: '10s Penalty' }),
-        expect.objectContaining({ label: 'Drive-Through' }),
-        expect.objectContaining({ label: 'No Action' }),
-        expect.objectContaining({ label: 'Note Only' }),
+        expect.objectContaining({ label: '10s penalty' }),
+        expect.objectContaining({ label: '20s penalty' }),
+        expect.objectContaining({ label: 'Drive Through' }),
+        expect.objectContaining({ label: 'Disqualified' }),
       ]);
     });
 
@@ -512,13 +529,16 @@ describe('UserSettingsView integration', () => {
       hydrate(undefined);
 
       fireEvent.click(
-        screen.getByLabelText('Action 4 applies to one driver') as HTMLElement,
+        screen.getByLabelText('Action 1 applies to one driver') as HTMLElement,
       );
       settle();
 
       expect(lastPostedActions()).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ label: 'No Action', driverScoped: true }),
+          expect.objectContaining({
+            label: 'Racing incident: No investigation necessary',
+            driverScoped: true,
+          }),
         ]),
       );
     });
@@ -528,10 +548,10 @@ describe('UserSettingsView integration', () => {
       hydrate(undefined);
 
       fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
-      fireEvent.change(labelField(6), { target: { value: 'DSQ' } });
+      fireEvent.change(labelField(8), { target: { value: 'DSQ' } });
       settle();
 
-      expect(lastPostedActions()).toHaveLength(6);
+      expect(lastPostedActions()).toHaveLength(8);
       expect(lastPostedActions()).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ label: 'DSQ', driverScoped: true }),
@@ -552,14 +572,14 @@ describe('UserSettingsView integration', () => {
       settle();
 
       expect(screen.getByText(/label is needed/i)).toBeInTheDocument();
-      expect(lastPostedActions()).toHaveLength(4);
+      expect(lastPostedActions()).toHaveLength(6);
     });
 
     it('flags a duplicate label', () => {
       renderView();
       hydrate(undefined);
 
-      fireEvent.change(labelField(2), { target: { value: '5s Penalty' } });
+      fireEvent.change(labelField(2), { target: { value: '5s penalty' } });
       settle();
 
       expect(screen.getByText(/already uses this label/i)).toBeInTheDocument();
@@ -581,13 +601,17 @@ describe('UserSettingsView integration', () => {
       fireEvent.click(screen.getByLabelText('Move action 2 up'));
       settle();
 
-      expect(labelField(1).value).toBe('10s Penalty');
+      expect(labelField(1).value).toBe('Under investigation');
       expect(lastPostedActions()).toEqual([
-        expect.objectContaining({ label: '10s Penalty' }),
-        expect.objectContaining({ label: '5s Penalty' }),
-        expect.objectContaining({ label: 'Drive-Through' }),
-        expect.objectContaining({ label: 'No Action' }),
-        expect.objectContaining({ label: 'Note Only' }),
+        expect.objectContaining({ label: 'Under investigation' }),
+        expect.objectContaining({
+          label: 'Racing incident: No investigation necessary',
+        }),
+        expect.objectContaining({ label: '5s penalty' }),
+        expect.objectContaining({ label: '10s penalty' }),
+        expect.objectContaining({ label: '20s penalty' }),
+        expect.objectContaining({ label: 'Drive Through' }),
+        expect.objectContaining({ label: 'Disqualified' }),
       ]);
     });
 
@@ -605,8 +629,46 @@ describe('UserSettingsView integration', () => {
       );
       settle();
 
-      expect(labelField(1).value).toBe('5s Penalty');
+      expect(labelField(1).value).toBe(
+        'Racing incident: No investigation necessary',
+      );
       expect(lastPostedActions()).toBeNull();
+    });
+
+    it('autosaves the chat text of an action', () => {
+      renderView();
+      hydrate(undefined);
+
+      fireEvent.change(screen.getByLabelText('Action 3 chat text'), {
+        target: { value: '5 second time penalty' },
+      });
+      settle();
+
+      expect(lastPostedActions()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: '5s penalty',
+            chatLabel: '5 second time penalty',
+          }),
+        ]),
+      );
+    });
+
+    it('autosaves the steward announcement, trimmed', () => {
+      renderView();
+      hydrate(undefined);
+
+      fireEvent.change(screen.getByLabelText('Steward announcement message'), {
+        target: { value: '  Race control is live  ' },
+      });
+      settle();
+
+      expect(sendMessageMock).toHaveBeenCalledWith(
+        CONSTANTS.API.POST_USER_SETTINGS,
+        expect.objectContaining({
+          stewardAnnouncementMessage: 'Race control is live',
+        }),
+      );
     });
 
     it('offers no revert while already on the shipped tariff', () => {
@@ -628,7 +690,9 @@ describe('UserSettingsView integration', () => {
       settle();
       expect(lastPostedActions()).not.toBeNull();
 
-      fireEvent.change(labelField(1), { target: { value: '5s Penalty' } });
+      fireEvent.change(labelField(1), {
+        target: { value: 'Racing incident: No investigation necessary' },
+      });
       settle();
 
       expect(lastPostedActions()).toBeNull();

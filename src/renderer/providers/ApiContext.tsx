@@ -29,6 +29,14 @@ import {
   StewardAction,
   resolveStewardActions,
 } from '../utils/stewardActions';
+import {
+  DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE,
+  resolveAutoReplayMinMagnitude,
+} from '../utils/liveAutoReplay';
+import {
+  DEFAULT_CHAT_FEED_VISIBLE_SECONDS,
+  resolveChatFeedVisibleSeconds,
+} from '../utils/liveChatFeed';
 
 interface ReplayResponse {
   status: string;
@@ -45,6 +53,11 @@ interface UserSettingsResponse {
     dashboardView?: PersistedDashboardView | null;
     stewardAuthorName?: string;
     stewardActions?: unknown;
+    stewardAnnouncementMessage?: unknown;
+    stewardChatAutosend?: boolean;
+    liveAutoReplayMinMagnitude?: unknown;
+    liveChatFeedVisibleSeconds?: unknown;
+    simgridServerCommandsUrl?: unknown;
   };
 }
 
@@ -306,6 +319,22 @@ interface ApiContextType {
    * vocabulary rather than two.
    */
   stewardActions: StewardAction[];
+  /**
+   * The steward's chat announcement as stored — possibly empty, and possibly
+   * carrying the `{steward}` placeholder. Resolved against the steward's name
+   * where it is sent; see `resolveStewardAnnouncement`.
+   */
+  stewardAnnouncementTemplate: string;
+  /** Whether a call is posted to the in-game chat the moment it is made. */
+  stewardChatAutosend: boolean;
+  setStewardChatAutosend: (enabled: boolean) => void;
+  /** The magnitude auto replay acts at, already resolved to a number. */
+  liveAutoReplayMinMagnitude: number;
+  /** Seconds a new chat line stays up; 0 means until it is pushed off. */
+  liveChatFeedVisibleSeconds: number;
+  /** The SimGrid Server Commands link; empty means the connector is off. */
+  simgridServerCommandsUrl: string;
+  setSimgridServerCommandsUrl: (url: string) => void;
   persistDashboardFiltersEnabled: boolean;
   persistedDashboardView: PersistedDashboardView | null;
   lastReplaySyncAt: number | null;
@@ -382,6 +411,13 @@ const ApiContext = createContext<ApiContextType>({
   liveCaptureEnabled: false,
   stewardAuthor: DEFAULT_STEWARD_AUTHOR,
   stewardActions: [...DEFAULT_STEWARD_ACTIONS],
+  stewardAnnouncementTemplate: '',
+  stewardChatAutosend: false,
+  setStewardChatAutosend: () => {},
+  liveAutoReplayMinMagnitude: DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE,
+  liveChatFeedVisibleSeconds: DEFAULT_CHAT_FEED_VISIBLE_SECONDS,
+  simgridServerCommandsUrl: '',
+  setSimgridServerCommandsUrl: () => {},
   persistDashboardFiltersEnabled: false,
   persistedDashboardView: null,
   lastReplaySyncAt: null,
@@ -449,6 +485,36 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
   const [stewardActions, setStewardActions] = useState<StewardAction[]>(() => [
     ...DEFAULT_STEWARD_ACTIONS,
   ]);
+  const [stewardAnnouncementTemplate, setStewardAnnouncementTemplate] =
+    useState('');
+  const [stewardChatAutosend, setStewardChatAutosendState] = useState(false);
+  const [simgridServerCommandsUrl, setSimgridServerCommandsUrlState] =
+    useState('');
+  // Written straight to settings, like the autosend switch above.
+  const setSimgridServerCommandsUrl = useCallback((url: string) => {
+    setSimgridServerCommandsUrlState(url);
+    sendMessage(CONSTANTS.API.POST_USER_SETTINGS, {
+      simgridServerCommandsUrl: url,
+    });
+  }, []);
+  const [liveChatFeedVisibleSeconds, setLiveChatFeedVisibleSeconds] = useState(
+    DEFAULT_CHAT_FEED_VISIBLE_SECONDS,
+  );
+  const [liveAutoReplayMinMagnitude, setLiveAutoReplayMinMagnitude] = useState(
+    DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE,
+  );
+  /*
+    Written straight to settings rather than through the settings view: the
+    switch lives on the live screen, beside the message it governs, and a
+    steward should not have to leave a running session to change it. The store
+    merges, so this touches nothing else.
+  */
+  const setStewardChatAutosend = useCallback((enabled: boolean) => {
+    setStewardChatAutosendState(enabled);
+    sendMessage(CONSTANTS.API.POST_USER_SETTINGS, {
+      stewardChatAutosend: enabled,
+    });
+  }, []);
   const [persistDashboardFiltersEnabled, setPersistDashboardFiltersEnabled] =
     useState(false);
   const [persistedDashboardView, setPersistedDashboardView] =
@@ -587,6 +653,34 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
     */
     if (payload?.data && 'stewardActions' in payload.data) {
       setStewardActions(resolveStewardActions(payload.data.stewardActions));
+    }
+
+    if (payload?.data && 'stewardAnnouncementMessage' in payload.data) {
+      setStewardAnnouncementTemplate(
+        typeof payload.data.stewardAnnouncementMessage === 'string'
+          ? payload.data.stewardAnnouncementMessage.trim()
+          : '',
+      );
+    }
+
+    if (typeof payload?.data?.simgridServerCommandsUrl === 'string') {
+      setSimgridServerCommandsUrlState(payload.data.simgridServerCommandsUrl);
+    }
+
+    if (payload?.data && 'liveChatFeedVisibleSeconds' in payload.data) {
+      setLiveChatFeedVisibleSeconds(
+        resolveChatFeedVisibleSeconds(payload.data.liveChatFeedVisibleSeconds),
+      );
+    }
+
+    if (payload?.data && 'liveAutoReplayMinMagnitude' in payload.data) {
+      setLiveAutoReplayMinMagnitude(
+        resolveAutoReplayMinMagnitude(payload.data.liveAutoReplayMinMagnitude),
+      );
+    }
+
+    if (typeof payload?.data?.stewardChatAutosend === 'boolean') {
+      setStewardChatAutosendState(payload.data.stewardChatAutosend);
     }
 
     if (typeof payload?.data?.persistDashboardFiltersEnabled === 'boolean') {
@@ -1006,6 +1100,21 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
       ),
       [CONSTANTS.API.POST_REPLAY_RETURN_TO_LIVE]: createHandler(
         CONSTANTS.API.POST_REPLAY_RETURN_TO_LIVE,
+      ),
+      [CONSTANTS.API.POST_STEWARD_CHAT_MESSAGE]: createHandler(
+        CONSTANTS.API.POST_STEWARD_CHAT_MESSAGE,
+      ),
+      [CONSTANTS.API.GET_STEWARD_CHAT_MESSAGES]: createHandler(
+        CONSTANTS.API.GET_STEWARD_CHAT_MESSAGES,
+      ),
+      [CONSTANTS.API.GET_SIMGRID_STATUS]: createHandler(
+        CONSTANTS.API.GET_SIMGRID_STATUS,
+      ),
+      [CONSTANTS.API.POST_SIMGRID_SIGN_IN]: createHandler(
+        CONSTANTS.API.POST_SIMGRID_SIGN_IN,
+      ),
+      [CONSTANTS.API.POST_SIMGRID_COMMAND]: createHandler(
+        CONSTANTS.API.POST_SIMGRID_COMMAND,
       ),
       [CONSTANTS.API.POST_SELECT_IMPORT_FILE]: createHandler(
         CONSTANTS.API.POST_SELECT_IMPORT_FILE,
@@ -1490,6 +1599,13 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
         experimentalFeaturesEnabled && liveCaptureSettingEnabled,
       stewardAuthor,
       stewardActions,
+      stewardAnnouncementTemplate,
+      stewardChatAutosend,
+      setStewardChatAutosend,
+      liveAutoReplayMinMagnitude,
+      liveChatFeedVisibleSeconds,
+      simgridServerCommandsUrl,
+      setSimgridServerCommandsUrl,
       persistDashboardFiltersEnabled,
       persistedDashboardView,
       lastReplaySyncAt,
@@ -1546,6 +1662,13 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
       liveCaptureSettingEnabled,
       stewardAuthor,
       stewardActions,
+      stewardAnnouncementTemplate,
+      stewardChatAutosend,
+      setStewardChatAutosend,
+      liveAutoReplayMinMagnitude,
+      liveChatFeedVisibleSeconds,
+      simgridServerCommandsUrl,
+      setSimgridServerCommandsUrl,
       persistDashboardFiltersEnabled,
       persistedDashboardView,
       lastReplaySyncAt,

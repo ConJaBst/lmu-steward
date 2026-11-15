@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
-import { Box, Paper, Stack, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  GlobalStyles,
+  Paper,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { alpha, Theme, useTheme } from '@mui/material/styles';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import { TrackMap } from '../TrackMap';
@@ -11,6 +18,12 @@ import {
 } from '../../utils/trackMapToSVG';
 import { LiveTrackMapState } from '../../hooks/useLiveTrackMap';
 import { LiveStanding } from './liveFixtures';
+import {
+  LiveCarTones,
+  liveCarToneColor,
+  liveCarToneLabel,
+  toneForStanding,
+} from '../../utils/liveCarTones';
 
 /**
  * The overlay and the outline have to agree about all three of these, or the
@@ -97,6 +110,12 @@ interface LiveTrackMapProps {
    * working and one that is silently doing nothing.
    */
   positionsFromFastFeed?: number;
+  /**
+   * Which cars to mark, and how — a battle, traffic, a loss of control, a
+   * contact. Optional: the timing screen's map passes nothing and draws every
+   * car in its class colour, as it always has.
+   */
+  tones?: LiveCarTones;
   onFocusCar: (slotId: number | undefined) => void;
 }
 
@@ -132,6 +151,7 @@ export const LiveTrackMap: React.FC<LiveTrackMapProps> = ({
   classFilter,
   focusedSlotId,
   positionsFromFastFeed = 0,
+  tones,
   onFocusCar,
 }) => {
   const theme = useTheme();
@@ -366,19 +386,55 @@ export const LiveTrackMap: React.FC<LiveTrackMapProps> = ({
                 />
               ) : null}
 
+              {/*
+                A new incident flashes its car for two seconds, then holds the
+                colour. Ten cycles of a fifth of a second and then it stops by
+                itself, so nothing has to time it — and it starts when the car
+                is first marked, which is when the incident arrived.
+
+                Switched off for anyone who has asked their system for less
+                motion; the solid colour says the same thing.
+              */}
+              <GlobalStyles
+                styles={{
+                  '@keyframes live-alert-flash': {
+                    '0%, 49%': { opacity: 1 },
+                    '50%, 100%': { opacity: 0.1 },
+                  },
+                  '.live-alert-flash': {
+                    animation: 'live-alert-flash 0.2s linear 10',
+                  },
+                  '@media (prefers-reduced-motion: reduce)': {
+                    '.live-alert-flash': { animation: 'none' },
+                  },
+                }}
+              />
               {placed.map(({ standing, x, y }) => {
                 const isFocused =
                   standing.slotId !== undefined &&
                   standing.slotId === focusedSlotId;
-                const fill = resolvePaletteColor(
+                const classFill = resolvePaletteColor(
                   theme,
                   getCarClassBadgeColor(standing.carClass),
                 );
+                const tone = toneForStanding(tones, standing);
+                const toneColor = tone
+                  ? theme.palette[liveCarToneColor[tone]].main
+                  : undefined;
+                /*
+                  An incident takes the whole marker; a battle or traffic only
+                  rings it. A car that has just hit something should be
+                  findable in one glance, while two cars merely running close
+                  still want their class colour read.
+                */
+                const isAlert = tone === 'loss' || tone === 'contact';
+                const fill = isAlert && toneColor ? toneColor : classFill;
 
                 return (
                   <g
                     key={standing.steamId}
                     data-testid={`track-map-car-${standing.steamId}`}
+                    data-tone={tone ?? 'none'}
                     role="button"
                     aria-label={`Watch #${standing.carNumber} ${standing.displayName}`}
                     style={{ cursor: 'pointer' }}
@@ -387,8 +443,19 @@ export const LiveTrackMap: React.FC<LiveTrackMapProps> = ({
                     {/* Hover gives the name; the label is the car number,
                         because a name at 54 cars is unreadable. */}
                     <title>
-                      {`#${standing.carNumber} ${standing.displayName} · ${standing.carClass} · P${standing.position}`}
+                      {`#${standing.carNumber} ${standing.displayName} · ${standing.carClass} · P${standing.position}${tone ? ` · ${liveCarToneLabel[tone]}` : ''}`}
                     </title>
+                    {toneColor ? (
+                      <circle
+                        className={isAlert ? 'live-alert-flash' : undefined}
+                        cx={x}
+                        cy={y}
+                        r={MARKER_RADIUS + 5}
+                        fill="none"
+                        stroke={toneColor}
+                        strokeWidth={5}
+                      />
+                    ) : null}
                     {isFocused ? (
                       <circle
                         cx={x}
@@ -400,6 +467,8 @@ export const LiveTrackMap: React.FC<LiveTrackMapProps> = ({
                       />
                     ) : null}
                     <circle
+                      className={isAlert ? 'live-alert-flash' : undefined}
+                      data-flash={isAlert ? 'true' : undefined}
                       cx={x}
                       cy={y}
                       r={MARKER_RADIUS}
@@ -413,7 +482,8 @@ export const LiveTrackMap: React.FC<LiveTrackMapProps> = ({
                     <text
                       x={x}
                       y={y}
-                      fill="#fff"
+                      // Yellow will not carry white text.
+                      fill={tone === 'loss' ? '#0B1218' : '#fff'}
                       fontSize={16}
                       fontWeight={700}
                       textAnchor="middle"

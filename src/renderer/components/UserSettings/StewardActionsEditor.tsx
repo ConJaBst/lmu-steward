@@ -21,6 +21,19 @@ import {
   stewardActionShortcut,
   validateStewardActions,
 } from '../../utils/stewardActions';
+import {
+  DEFAULT_STEWARD_ANNOUNCEMENT,
+  MAX_STEWARD_ANNOUNCEMENT_LENGTH,
+  STEWARD_NAME_PLACEHOLDER,
+  formatIncidentChatMessage,
+  formatPenaltyChatMessage,
+  resolveStewardAnnouncement,
+} from '../../utils/stewardChat';
+import {
+  SERVER_COMMAND_KIND_OPTIONS,
+  StewardServerCommandKind,
+  serverCommandOfKind,
+} from '../../utils/simgridCommands';
 
 interface Props {
   /**
@@ -33,8 +46,19 @@ interface Props {
   isAtDefaults: boolean;
   onChange: (next: StewardAction[]) => void;
   onRevert: () => void;
+  /** The chat announcement wording as typed; empty means the shipped wording. */
+  announcement: string;
+  onChangeAnnouncement: (next: string) => void;
+  /** The steward name as typed, for previewing the announcement. */
+  stewardName: string;
   disabled?: boolean;
 }
+
+/** Stand-ins for the previews, so a row shows the line it would produce. */
+const PREVIEW_DRIVERS = [
+  { displayName: 'Driver One', carNumber: '7' },
+  { displayName: 'Driver Two', carNumber: '51' },
+];
 
 /** Editing identity only, and only ever handed to rows created here. */
 let nextLocalId = 0;
@@ -44,7 +68,8 @@ const newActionId = (): string => {
 };
 
 /**
- * Configures the action buttons both dossiers offer.
+ * Configures the action buttons both dossiers offer, and what each one says in
+ * the in-game chat.
  *
  * The label is the value: what is typed here is what the button says, what the
  * decision stores and what every export carries, so a league matches whatever
@@ -58,6 +83,9 @@ export const StewardActionsEditor: React.FC<Props> = ({
   isAtDefaults,
   onChange,
   onRevert,
+  announcement,
+  onChangeAnnouncement,
+  stewardName,
   disabled = false,
 }) => {
   const { errorByActionId } = validateStewardActions(actions);
@@ -97,15 +125,18 @@ export const StewardActionsEditor: React.FC<Props> = ({
       >
         <Box sx={{ pr: 2 }}>
           <Typography variant="subtitle2" fontWeight={600}>
-            Decision Actions
+            Decision Actions &amp; Chat Messages
           </Typography>
           <Typography variant="caption" color="text.secondary">
             The buttons offered when you call an incident, live and in
-            post-session review. Whatever you type is what the decision records
-            and what CSV, Markdown and JSON exports carry, so it can match your
-            league&apos;s own wording. The first nine get keyboard shortcuts in
-            the order below. Decisions already made keep the wording they were
-            made under, whatever you change here.
+            post-session review, and what each one says in the in-game chat. The
+            label is what the decision records and what CSV, Markdown and JSON
+            exports carry, so it can match your league&apos;s own wording. The
+            chat text is optional: leave it blank to say the label. The server
+            penalty is what the SimGrid connector applies for that action, after
+            asking you. The first nine get keyboard shortcuts in the order
+            below. Decisions already made keep the wording they were made under,
+            whatever you change here.
           </Typography>
         </Box>
         <Tooltip
@@ -138,6 +169,15 @@ export const StewardActionsEditor: React.FC<Props> = ({
         {actions.map((action, index) => {
           const shortcut = stewardActionShortcut(index);
           const error = errorByActionId[action.id];
+          const said = action.chatLabel?.trim() || action.label.trim();
+          /*
+            The line this row would post, so the two shapes are visible rather
+            than described: a call against a driver names one, a finding about
+            the incident lists everyone in it.
+          */
+          const preview = action.driverScoped
+            ? formatPenaltyChatMessage(PREVIEW_DRIVERS[0], said, 'Reason')
+            : formatIncidentChatMessage(said, PREVIEW_DRIVERS, 'Reason');
 
           return (
             <Stack
@@ -162,7 +202,7 @@ export const StewardActionsEditor: React.FC<Props> = ({
                 fullWidth
                 value={action.label}
                 error={Boolean(error)}
-                helperText={error}
+                helperText={error ?? (said ? preview : undefined)}
                 inputProps={{
                   maxLength: MAX_STEWARD_ACTION_LABEL_LENGTH,
                   'aria-label': `Action ${index + 1} label`,
@@ -172,6 +212,78 @@ export const StewardActionsEditor: React.FC<Props> = ({
                 }
                 disabled={disabled}
               />
+              <TextField
+                size="small"
+                sx={{ minWidth: 190 }}
+                value={action.chatLabel ?? ''}
+                placeholder={action.label.trim() || 'Chat text'}
+                inputProps={{
+                  maxLength: MAX_STEWARD_ACTION_LABEL_LENGTH,
+                  'aria-label': `Action ${index + 1} chat text`,
+                }}
+                onChange={(changeEvent) =>
+                  replaceAt(index, { chatLabel: changeEvent.target.value })
+                }
+                disabled={disabled}
+              />
+              {/*
+                What this action does on the server, through the SimGrid
+                connector — nothing, unless set. Only offered on a call against
+                one driver: a server penalty has to land on somebody.
+              */}
+              <TextField
+                select
+                size="small"
+                sx={{ minWidth: 150 }}
+                value={
+                  action.driverScoped ? (action.serverCommand?.kind ?? '') : ''
+                }
+                SelectProps={{ native: true }}
+                inputProps={{
+                  'aria-label': `Action ${index + 1} server penalty`,
+                }}
+                onChange={(changeEvent) =>
+                  replaceAt(index, {
+                    serverCommand: serverCommandOfKind(
+                      changeEvent.target.value as StewardServerCommandKind | '',
+                      action.serverCommand && 'seconds' in action.serverCommand
+                        ? action.serverCommand.seconds
+                        : undefined,
+                    ),
+                  })
+                }
+                disabled={disabled || !action.driverScoped}
+              >
+                <option value="">No server penalty</option>
+                {SERVER_COMMAND_KIND_OPTIONS.map((option) => (
+                  <option key={option.kind} value={option.kind}>
+                    {option.label}
+                  </option>
+                ))}
+              </TextField>
+              {action.driverScoped &&
+              action.serverCommand &&
+              'seconds' in action.serverCommand ? (
+                <TextField
+                  size="small"
+                  type="number"
+                  sx={{ width: 84 }}
+                  value={action.serverCommand.seconds}
+                  inputProps={{
+                    min: 1,
+                    'aria-label': `Action ${index + 1} server penalty seconds`,
+                  }}
+                  onChange={(changeEvent) =>
+                    replaceAt(index, {
+                      serverCommand: serverCommandOfKind(
+                        action.serverCommand?.kind ?? '',
+                        changeEvent.target.value,
+                      ),
+                    })
+                  }
+                  disabled={disabled}
+                />
+              ) : null}
               {/*
                 "Does this apply to one driver, or to the incident?" — the check
                 that stops a penalty being recorded against a two-car incident
@@ -269,6 +381,43 @@ export const StewardActionsEditor: React.FC<Props> = ({
       >
         Add action
       </Button>
+
+      {/*
+        In the same box as the actions because it is the same subject: what
+        this steward says in the session's chat. The autosend switch is not
+        here — it sits on the live screen beside the message it governs.
+      */}
+      <Box
+        sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}
+      >
+        <Typography variant="subtitle2" fontWeight={600}>
+          Steward Announcement
+        </Typography>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mb: 1 }}
+        >
+          The message the Announce button on the live screen posts to the
+          in-game chat. Write {STEWARD_NAME_PLACEHOLDER} where your steward name
+          should go. Left blank, the shipped wording is used.
+        </Typography>
+        <TextField
+          size="small"
+          fullWidth
+          value={announcement}
+          placeholder={DEFAULT_STEWARD_ANNOUNCEMENT}
+          helperText={`Sends: ${resolveStewardAnnouncement(announcement, stewardName)}`}
+          inputProps={{
+            maxLength: MAX_STEWARD_ANNOUNCEMENT_LENGTH,
+            'aria-label': 'Steward announcement message',
+          }}
+          onChange={(changeEvent) =>
+            onChangeAnnouncement(changeEvent.target.value)
+          }
+          disabled={disabled}
+        />
+      </Box>
     </Box>
   );
 };

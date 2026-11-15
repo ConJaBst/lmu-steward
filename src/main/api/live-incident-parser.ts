@@ -106,6 +106,35 @@ const parseTrackLimits = (
   };
 };
 
+/**
+ * A penalty the game itself gave.
+ *
+ *   <Penalty Driver="Bradley Drake" ID="9" Penalty="Stop/Go" Time="100" Laps="0" Reason="Speeding In Pitlane" et="50.0">issued</Penalty>
+ *   <Penalty et="51.0">Bradley Drake served 1st Stop/Go penalty</Penalty>
+ *
+ * Only the first names a driver. The follow-ups — served, finished before
+ * serving — carry no attributes at all and come back with no party, which is
+ * how the renderer tells the two apart.
+ */
+const parsePenalty = (
+  raw: string,
+  etSeconds: number,
+  id: string,
+): LiveCaptureIncident => {
+  const driver = attribute(raw, 'Driver');
+  const slotId = numericAttribute(raw, 'ID');
+
+  return {
+    id,
+    kind: 'penalty',
+    etSeconds,
+    raw,
+    parties: driver ? [{ displayName: driver, slotId }] : [],
+    penaltyType: attribute(raw, 'Penalty'),
+    penaltyReason: attribute(raw, 'Reason'),
+  };
+};
+
 export const parseStewardEvent = (
   raw: string,
   kind: LiveIncidentKind,
@@ -118,6 +147,10 @@ export const parseStewardEvent = (
 
   if (kind === 'incident') {
     return parseContact(raw, etSeconds, id);
+  }
+
+  if (kind === 'penalty') {
+    return parsePenalty(raw, etSeconds, id);
   }
 
   return { id, kind, etSeconds, raw, parties: [] };

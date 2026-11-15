@@ -27,7 +27,9 @@ export type LiveIncidentClassification =
   | 'track-limits'
   | 'blue-flag'
   | 'unsafe-rejoin'
-  | 'loss-of-control';
+  | 'loss-of-control'
+  /** A penalty the game itself gave — speeding in the pits, a cut too far. */
+  | 'penalty';
 
 /**
  * Fixed order for anything that lists classifications, so a chip row does not
@@ -39,6 +41,7 @@ export const LIVE_INCIDENT_CLASSIFICATIONS: LiveIncidentClassification[] = [
   'loss-of-control',
   'unsafe-rejoin',
   'blue-flag',
+  'penalty',
 ];
 
 /** Shared so the queue, the overview and the filter bar cannot drift apart. */
@@ -51,6 +54,7 @@ export const liveClassificationLabel: Record<
   'blue-flag': 'Blue Flag',
   'unsafe-rejoin': 'Unsafe Rejoin',
   'loss-of-control': 'Loss of Control',
+  penalty: 'Penalty',
 };
 
 /**
@@ -175,6 +179,14 @@ export interface LiveIncident {
   state: LiveIncidentState;
   decision?: LiveDecisionOutcome;
   decisionReasoning?: string;
+  /**
+   * Track limits only: the points this incident added, and the driver's
+   * running total straight after it. An incident that added nothing is never
+   * built — the game sends those for an off it then forgave.
+   */
+  trackLimit?: { added: number; current?: number };
+  /** Game-given penalties only: what it was and why, in the game's words. */
+  penalty?: { type?: string; reason?: string };
 }
 
 /**
@@ -214,8 +226,27 @@ export interface LivePriorCall {
   decidedAt: number;
 }
 
+/**
+ * How the triage queue is ordered inside each state group.
+ *
+ * `newest` is the default: during a session the incident a steward needs is
+ * almost always the one that just happened. `biggest` puts the heaviest contact
+ * first, for going back through a session looking for the ones that mattered.
+ */
+export type LiveIncidentSort = 'newest' | 'biggest';
+
+export const DEFAULT_LIVE_INCIDENT_SORT: LiveIncidentSort = 'newest';
+
 export interface LiveIncidentFilters {
-  classification: LiveIncidentClassification | 'ALL';
+  /**
+   * The kinds of incident taken *out* of the queue. Empty shows everything.
+   *
+   * A list of what is hidden rather than one kind that is shown: the working
+   * question is "stop showing me track limits and spins", which is several
+   * kinds at once, and a kind the session has not produced yet should appear
+   * when it does rather than be excluded by a choice made before it existed.
+   */
+  hiddenClassifications: LiveIncidentClassification[];
   /** A class code as `CarClassBadge` renders it, or `ALL`. */
   carClass: string;
   /** A party's identity key, or `ALL`. */
@@ -225,7 +256,7 @@ export interface LiveIncidentFilters {
 }
 
 export const DEFAULT_LIVE_INCIDENT_FILTERS: LiveIncidentFilters = {
-  classification: 'ALL',
+  hiddenClassifications: [],
   carClass: 'ALL',
   driverSteamId: 'ALL',
   minMagnitude: 0,
@@ -242,10 +273,7 @@ export const matchesLiveIncidentFilters = (
   incident: LiveIncident,
   filters: LiveIncidentFilters,
 ): boolean => {
-  if (
-    filters.classification !== 'ALL' &&
-    incident.classification !== filters.classification
-  ) {
+  if (filters.hiddenClassifications.includes(incident.classification)) {
     return false;
   }
   if (
@@ -277,7 +305,7 @@ export const matchesLiveIncidentFilters = (
 export const hasActiveLiveIncidentFilters = (
   filters: LiveIncidentFilters,
 ): boolean =>
-  filters.classification !== 'ALL' ||
+  filters.hiddenClassifications.length > 0 ||
   filters.carClass !== 'ALL' ||
   filters.driverSteamId !== 'ALL' ||
   filters.minMagnitude > 0;
@@ -420,6 +448,11 @@ export interface LiveSessionState {
   timeRemainingSeconds: number;
   lapsCompleted: number;
   trackLimitStepsPerPenalty: number;
+  /**
+   * Track-limit points at which the game gives a penalty; see
+   * `utils/trackLimits.ts`. Absent when the game has not said.
+   */
+  trackLimitPointsLimit?: number;
   connected: boolean;
 
   /*
@@ -499,7 +532,8 @@ export const liveSessionFixture: LiveSessionState = {
   phase: 'green',
   timeRemainingSeconds: 4359,
   lapsCompleted: 41,
-  trackLimitStepsPerPenalty: 4,
+  trackLimitStepsPerPenalty: 16,
+  trackLimitPointsLimit: 4,
   connected: true,
   // 14:42:05, matching the header ordering the mockups settle on.
   timeOfDay: 52925,

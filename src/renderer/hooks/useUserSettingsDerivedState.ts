@@ -31,6 +31,12 @@ interface UseUserSettingsDerivedStateArgs {
    * when it is the shipped set. See `toStoredStewardActions`.
    */
   storedStewardActions: StewardAction[] | null;
+  /** The chat announcement wording; empty means the shipped wording. */
+  stewardAnnouncementMessage: string;
+  /** Auto replay's magnitude floor, already resolved to a number. */
+  liveAutoReplayMinMagnitude: number;
+  /** Seconds a chat line stays up, already resolved; 0 means no time limit. */
+  liveChatFeedVisibleSeconds: number;
   anonymizeDriverData: boolean;
   telemetryCacheEnabled: boolean;
   clearCacheOnExit: boolean;
@@ -62,6 +68,9 @@ export const useUserSettingsDerivedState = ({
   liveCaptureEnabled,
   stewardAuthorName,
   storedStewardActions,
+  stewardAnnouncementMessage,
+  liveAutoReplayMinMagnitude,
+  liveChatFeedVisibleSeconds,
   anonymizeDriverData,
   telemetryCacheEnabled,
   clearCacheOnExit,
@@ -144,6 +153,10 @@ export const useUserSettingsDerivedState = ({
         stored value.
       */
       stewardActions: storedStewardActions,
+      // Trimmed for the same reason as the steward's name above.
+      stewardAnnouncementMessage: stewardAnnouncementMessage.trim(),
+      liveAutoReplayMinMagnitude,
+      liveChatFeedVisibleSeconds,
       anonymizeDriverData,
       telemetryCacheEnabled,
       clearCacheOnExit,
@@ -158,6 +171,9 @@ export const useUserSettingsDerivedState = ({
       liveCaptureEnabled,
       stewardAuthorName,
       storedStewardActions,
+      stewardAnnouncementMessage,
+      liveAutoReplayMinMagnitude,
+      liveChatFeedVisibleSeconds,
       anonymizeDriverData,
       telemetryCacheEnabled,
       clearCacheOnExit,

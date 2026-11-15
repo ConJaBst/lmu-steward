@@ -15,6 +15,7 @@ import {
   LiveIncidentClassification,
   LiveIncidentFilterOptions,
   LiveIncidentFilters as LiveIncidentFilterState,
+  LiveIncidentSort,
   hasActiveLiveIncidentFilters,
   liveClassificationLabel,
 } from './liveFixtures';
@@ -27,7 +28,10 @@ interface LiveIncidentFiltersProps {
   /** How many of the session's incidents survive the current filters. */
   matchCount: number;
   totalCount: number;
+  /** How the queue is ordered. Not a filter: it never hides anything. */
+  sort: LiveIncidentSort;
   onChange: (patch: Partial<LiveIncidentFilterState>) => void;
+  onChangeSort: (next: LiveIncidentSort) => void;
   onReset: () => void;
 }
 
@@ -50,10 +54,13 @@ export const LiveIncidentFilters: React.FC<LiveIncidentFiltersProps> = ({
   options,
   matchCount,
   totalCount,
+  sort,
   onChange,
+  onChangeSort,
   onReset,
 }) => {
   const active = hasActiveLiveIncidentFilters(filters);
+  const hidden = filters.hiddenClassifications;
 
   return (
     <Paper
@@ -77,7 +84,7 @@ export const LiveIncidentFilters: React.FC<LiveIncidentFiltersProps> = ({
           color="text.secondary"
           sx={{ textTransform: 'uppercase', letterSpacing: 0.8 }}
         >
-          Type
+          Show
         </Typography>
 
         {/*
@@ -85,6 +92,10 @@ export const LiveIncidentFilters: React.FC<LiveIncidentFiltersProps> = ({
           steward reaches for most, and it is worth the horizontal space to
           make it one click. Only the kinds this session has actually produced
           are offered — an empty bucket is a dead control.
+
+          Each chip is its own switch. Lit means that kind is in the queue;
+          clicking it takes that kind out, and any number can be out at once —
+          "no track limits, no spins" is two clicks, not a choice between them.
         */}
         <Stack
           direction="row"
@@ -98,29 +109,35 @@ export const LiveIncidentFilters: React.FC<LiveIncidentFiltersProps> = ({
             size="small"
             label="All"
             clickable
-            aria-pressed={filters.classification === ALL}
-            variant={filters.classification === ALL ? 'filled' : 'outlined'}
-            color={filters.classification === ALL ? 'primary' : 'default'}
-            onClick={() => onChange({ classification: ALL })}
+            aria-pressed={hidden.length === 0}
+            variant={hidden.length === 0 ? 'filled' : 'outlined'}
+            color={hidden.length === 0 ? 'primary' : 'default'}
+            onClick={() => onChange({ hiddenClassifications: [] })}
           />
           {options.classifications.map((classification) => {
-            const isActive = filters.classification === classification;
+            const isShown = !hidden.includes(classification);
             return (
               <Chip
                 key={classification}
                 size="small"
                 label={liveClassificationLabel[classification]}
                 clickable
-                aria-pressed={isActive}
-                variant={isActive ? 'filled' : 'outlined'}
-                color={isActive ? 'primary' : 'default'}
+                aria-pressed={isShown}
+                variant={isShown ? 'filled' : 'outlined'}
+                color={isShown ? 'primary' : 'default'}
+                sx={
+                  isShown
+                    ? undefined
+                    : { textDecoration: 'line-through', opacity: 0.7 }
+                }
                 onClick={() =>
                   onChange({
-                    // A second click on the active chip clears it, so getting
-                    // back to everything never needs the reset button.
-                    classification: isActive
-                      ? ALL
-                      : (classification as LiveIncidentClassification),
+                    hiddenClassifications: isShown
+                      ? [
+                          ...hidden,
+                          classification as LiveIncidentClassification,
+                        ]
+                      : hidden.filter((entry) => entry !== classification),
                   })
                 }
               />
@@ -129,6 +146,27 @@ export const LiveIncidentFilters: React.FC<LiveIncidentFiltersProps> = ({
         </Stack>
 
         <Box sx={{ flex: 1, minWidth: 0 }} />
+
+        {/*
+          Beside the filters because it is set in the same breath, but kept out
+          of their state: "Clear" resets what is hidden and leaves the order
+          alone, since an order is a preference rather than a narrowing.
+        */}
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel id="live-incident-sort-label">Sort</InputLabel>
+          <Select
+            labelId="live-incident-sort-label"
+            id="live-incident-sort"
+            label="Sort"
+            value={sort}
+            onChange={(event) =>
+              onChangeSort(event.target.value as LiveIncidentSort)
+            }
+          >
+            <MenuItem value="newest">Newest first</MenuItem>
+            <MenuItem value="biggest">Biggest first</MenuItem>
+          </Select>
+        </FormControl>
 
         <FormControl size="small" sx={{ minWidth: 128 }}>
           <InputLabel id="live-incident-class-label">Car class</InputLabel>

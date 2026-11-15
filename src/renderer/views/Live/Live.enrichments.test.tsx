@@ -87,7 +87,7 @@ const priorDecision = (
       The steward's own label, which is what a record now carries — no lookup
       turns this into display text, so what is stored here is what is printed.
     */
-    outcome: '10s Penalty',
+    outcome: '10s penalty',
     stewardAuthor: 'Steward',
     decidedAt: 1,
     state: 'DECIDED',
@@ -131,7 +131,11 @@ describe('optional reasoning on a live call', () => {
     fireEvent.change(screen.getByLabelText(/Reasoning \(optional\)/i), {
       target: { value: 'Late dive from too far back' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /No Action/ }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    );
 
     expect(savedDecision().reasoning).toBe('Late dive from too far back');
   });
@@ -148,7 +152,7 @@ describe('optional reasoning on a live call', () => {
     fireEvent.change(screen.getByLabelText(/Reasoning \(optional\)/i), {
       target: { value: 'Nothing in it' },
     });
-    fireEvent.keyDown(window, { key: '4' });
+    fireEvent.keyDown(window, { key: '1' });
 
     expect(savedDecision().reasoning).toBe('Nothing in it');
   });
@@ -162,7 +166,11 @@ describe('optional reasoning on a live call', () => {
     fireEvent.change(screen.getByLabelText(/Reasoning \(optional\)/i), {
       target: { value: '   ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /No Action/ }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    );
 
     expect(savedDecision().reasoning).toBeUndefined();
   });
@@ -202,7 +210,7 @@ describe('optional reasoning on a live call', () => {
     expect(saveStewardDecision).not.toHaveBeenCalled();
 
     // And still fires from anywhere else on the page.
-    fireEvent.keyDown(window, { key: '4' });
+    fireEvent.keyDown(window, { key: '1' });
     expect(saveStewardDecision).toHaveBeenCalledTimes(1);
   });
 
@@ -213,7 +221,11 @@ describe('optional reasoning on a live call', () => {
     fireEvent.change(screen.getByLabelText(/Reasoning \(optional\)/i), {
       target: { value: 'For this one only' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /No Action/ }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    );
 
     expect(screen.getByLabelText(/Reasoning \(optional\)/i)).toHaveValue('');
   });
@@ -241,7 +253,7 @@ describe('prior calls in the dossier', () => {
 
     expect(
       within(screen.getByTestId(`prior-calls-${drake.steamId}`)).getByText(
-        'L12 · 10s Penalty',
+        'L12 · 10s penalty',
       ),
     ).toBeInTheDocument();
 
@@ -259,14 +271,19 @@ describe('prior calls in the dossier', () => {
 
   // A finding about the incident as a whole belongs to everyone who was in it.
   it('should show an untargeted finding against every party', () => {
-    setDecisions(priorDecision({ target: undefined, outcome: 'No Action' }));
+    setDecisions(
+      priorDecision({
+        target: undefined,
+        outcome: 'Racing incident: No investigation necessary',
+      }),
+    );
     renderLive();
     selectIncident();
 
     [drake, lindqvist].forEach((driver) => {
       expect(
         within(screen.getByTestId(`prior-calls-${driver.steamId}`)).getByText(
-          'L12 · No Action',
+          'L12 · Racing incident: No investigation necessary',
         ),
       ).toBeInTheDocument();
     });
@@ -313,7 +330,12 @@ describe('watchlist penalties', () => {
 
   // A "no action" is the steward clearing a driver, not penalising them.
   it('should not count an incident-scoped finding as a penalty', () => {
-    setDecisions(priorDecision({ target: undefined, outcome: 'No Action' }));
+    setDecisions(
+      priorDecision({
+        target: undefined,
+        outcome: 'Racing incident: No investigation necessary',
+      }),
+    );
     renderLive('/live');
 
     expect(screen.queryByText(/\d+ steward/)).toBeNull();

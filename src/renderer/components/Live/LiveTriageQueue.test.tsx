@@ -4,9 +4,19 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { LiveTriageQueue } from './LiveTriageQueue';
 import {
   DEFAULT_LIVE_INCIDENT_FILTERS,
+  LIVE_INCIDENT_CLASSIFICATIONS,
+  LiveIncident,
   LiveIncidentFilters,
+  LiveIncidentSort,
+  LiveIncidentState,
   buildLiveIncidentsFixture,
 } from './liveFixtures';
+import { RESOLVED_QUIETLY_OUTCOME } from '../../utils/stewardActions';
+
+/** Everything but contact switched off — the filter's way of saying "contact". */
+const CONTACT_ONLY = LIVE_INCIDENT_CLASSIFICATIONS.filter(
+  (classification) => classification !== 'contact',
+);
 
 /*
   Counting row renders directly.
@@ -174,7 +184,7 @@ describe('LiveTriageQueue quick filters', () => {
 
     renderQueue(incidents, {
       ...DEFAULT_LIVE_INCIDENT_FILTERS,
-      classification: 'contact',
+      hiddenClassifications: CONTACT_ONLY,
       minMagnitude: 2000,
     });
 
@@ -195,7 +205,7 @@ describe('LiveTriageQueue quick filters', () => {
 
     renderQueue(incidents, {
       ...DEFAULT_LIVE_INCIDENT_FILTERS,
-      classification: 'contact',
+      hiddenClassifications: CONTACT_ONLY,
     });
     expect(screen.getByText(`All ${contactsOnly.length}`)).toBeInTheDocument();
   });
@@ -237,5 +247,156 @@ describe('LiveTriageQueue quick filters', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Clear filters/ }));
     expect(onClearFilters).toHaveBeenCalled();
+  });
+});
+
+describe('LiveTriageQueue order', () => {
+  const at = (
+    id: string,
+    etSeconds: number,
+    contactMagnitude: number,
+    over: Partial<LiveIncident> = {},
+  ): LiveIncident => ({
+    ...buildLiveIncidentsFixture(1)[0],
+    id,
+    etSeconds,
+    timestampLabel: `T${id}`,
+    contactMagnitude,
+    classification: 'contact',
+    state: 'NEW',
+    decision: undefined,
+    ...over,
+  });
+
+  // Oldest and heaviest, then a light one, then the newest in between.
+  const three = [
+    at('old', 100, 3000),
+    at('mid', 200, 400),
+    at('new', 300, 900),
+  ];
+
+  const order = () =>
+    screen.getAllByText(/^T(old|mid|new|done)$/).map((row) => row.textContent);
+
+  const renderSorted = (
+    incidents: LiveIncident[],
+    sort?: LiveIncidentSort,
+    stateFilter: LiveIncidentState | 'ALL' = 'ALL',
+  ) =>
+    render(
+      <LiveTriageQueue
+        incidents={incidents}
+        stateFilter={stateFilter}
+        filters={DEFAULT_LIVE_INCIDENT_FILTERS}
+        sort={sort}
+        onSelectIncident={noop}
+        onChangeStateFilter={noop}
+      />,
+    );
+
+  it('should put the newest incident first by default', () => {
+    renderSorted(three);
+
+    expect(order()).toEqual(['Tnew', 'Tmid', 'Told']);
+  });
+
+  it('should put the biggest incident first when asked', () => {
+    renderSorted(three, 'biggest');
+
+    expect(order()).toEqual(['Told', 'Tnew', 'Tmid']);
+  });
+
+  // The state groups still come first: what needs a look stays on top.
+  it('should keep undecided incidents above decided ones in either order', () => {
+    const decided = at('done', 400, 5000, {
+      state: 'DECIDED',
+      decision: '5s penalty',
+    });
+
+    renderSorted([...three, decided]);
+    expect(order()).toEqual(['Tnew', 'Tmid', 'Told', 'Tdone']);
+  });
+
+  describe('an incident resolved quietly', () => {
+    const quiet = at('done', 400, 5000, {
+      state: 'DECIDED',
+      decision: RESOLVED_QUIETLY_OUTCOME,
+    });
+
+    it('should leave the list, and the count beside it', () => {
+      renderSorted([...three, quiet]);
+
+      expect(order()).toEqual(['Tnew', 'Tmid', 'Told']);
+      expect(screen.getByText('All 3')).toBeInTheDocument();
+    });
+
+    // Still a decision on the books, and the way back to one made by mistake.
+    it('should still be listed under Decided', () => {
+      renderSorted([...three, quiet], undefined, 'DECIDED');
+
+      expect(order()).toEqual(['Tdone']);
+      expect(screen.getByText('Decided 1')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('what a row says about its incident', () => {
+  const row = (over: Partial<LiveIncident>): LiveIncident => ({
+    ...buildLiveIncidentsFixture(1)[0],
+    id: 'row',
+    timestampLabel: 'T-row',
+    contactMagnitude: undefined,
+    state: 'NEW',
+    decision: undefined,
+    ...over,
+  });
+
+  const renderRow = (incident: LiveIncident, limit?: number) =>
+    render(
+      <LiveTriageQueue
+        incidents={[incident]}
+        stateFilter="ALL"
+        filters={DEFAULT_LIVE_INCIDENT_FILTERS}
+        trackLimitPointsLimit={limit}
+        onSelectIncident={noop}
+        onChangeStateFilter={noop}
+      />,
+    );
+
+  it('should show track-limit points out of the penalty limit', () => {
+    renderRow(
+      row({
+        classification: 'track-limits',
+        trackLimit: { added: 1, current: 2.25 },
+      }),
+      4,
+    );
+
+    expect(screen.getByText('2.25 / 4 points (+1)')).toBeInTheDocument();
+  });
+
+  it('should show the points alone when the limit is not known', () => {
+    renderRow(
+      row({
+        classification: 'track-limits',
+        trackLimit: { added: 0.5, current: 1.5 },
+      }),
+    );
+
+    expect(screen.getByText('1.5 points (+0.5)')).toBeInTheDocument();
+  });
+
+  it('should label a game penalty as a penalty, with what it was for', () => {
+    renderRow(
+      row({
+        classification: 'penalty',
+        penalty: { type: 'Stop/Go', reason: 'Speeding In Pitlane' },
+      }),
+    );
+
+    expect(screen.getByText('Penalty')).toBeInTheDocument();
+    expect(
+      screen.getByText('Stop/Go · Speeding In Pitlane'),
+    ).toBeInTheDocument();
   });
 });

@@ -6,6 +6,12 @@ import { ViewHeader } from '../../components/Common/ViewHeader';
 import { LiveNavRail } from '../../components/Live/LiveNavRail';
 import { LiveSessionHeader } from '../../components/Live/LiveSessionHeader';
 import {
+  LIVE_CHAT_BAR_HEIGHT,
+  LiveChatBar,
+} from '../../components/Live/LiveChatBar';
+import { LiveChatFeed } from '../../components/Live/LiveChatFeed';
+import { LiveServerPenaltyPrompt } from '../../components/Live/LiveServerPenaltyPrompt';
+import {
   LIVE_CAMERA_BAR_HEIGHT,
   LiveCameraControls,
 } from '../../components/Live/LiveCameraControls';
@@ -210,8 +216,25 @@ const LiveShellBody: React.FC = () => {
             {deferredCount > 0 ? ` · ${deferredCount} deferred` : ''}
           </Typography>
         }
+        /*
+          New in-game chat, in the space beside the circuit name and
+          directly above the bar that answers it.
+        */
+        actions={isReviewingRecord ? undefined : <LiveChatFeed />}
         onBack={() => navigate('/')}
       />
+
+      {/*
+        Not against a record: chat goes to the session the game is in now, which
+        is not the one a finished segment describes.
+
+        Above the session strip, directly under the header its incoming
+        messages appear in, so reading the chat and answering it are one place.
+      */}
+      {isReviewingRecord ? null : <LiveChatBar />}
+
+      {/* Asks before a call's server penalty goes to SimGrid. */}
+      <LiveServerPenaltyPrompt />
 
       {/*
         Above the rail, not inside a route: this is the session's general
@@ -260,7 +283,7 @@ const LiveShellBody: React.FC = () => {
             // of the window, so it comes off the same total.
             height: {
               xs: 'auto',
-              lg: `calc(100vh - ${372 + (canDriveCamera ? LIVE_CAMERA_BAR_HEIGHT : 0)}px)`,
+              lg: `calc(100vh - ${372 + (canDriveCamera ? LIVE_CAMERA_BAR_HEIGHT : 0) + (isReviewingRecord ? 0 : LIVE_CHAT_BAR_HEIGHT)}px)`,
             },
             minHeight: { lg: 460 },
           }}

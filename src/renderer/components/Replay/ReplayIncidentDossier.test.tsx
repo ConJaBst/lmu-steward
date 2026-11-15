@@ -168,7 +168,7 @@ describe('ReplayIncidentDossier', () => {
     );
 
     expect(screen.getByText('No captured evidence')).toBeInTheDocument();
-    expect(screen.getByText('5s Penalty')).toBeInTheDocument();
+    expect(screen.getByText('5s penalty')).toBeInTheDocument();
     expect(screen.getByText(/Flag for review/)).toBeInTheDocument();
   });
 
@@ -204,7 +204,7 @@ describe('ReplayIncidentDossier', () => {
     );
 
     expect(screen.getByText('No captured evidence')).toBeInTheDocument();
-    expect(screen.getByText('5s Penalty')).toBeInTheDocument();
+    expect(screen.getByText('5s penalty')).toBeInTheDocument();
   });
 
   /*
@@ -228,7 +228,9 @@ describe('ReplayIncidentDossier', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('No Action'));
+    fireEvent.click(
+      screen.getByText('Racing incident: No investigation necessary'),
+    );
 
     const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
     expect(saved.sessionKey).toBe('replay|hash-p1-7');
@@ -258,7 +260,7 @@ describe('ReplayIncidentDossier', () => {
     const { saveStewardDecision } = renderDossier();
 
     fireEvent.click(screen.getByText('Antares Au'));
-    fireEvent.click(screen.getByText('5s Penalty'));
+    fireEvent.click(screen.getByText('5s penalty'));
 
     expect(saveStewardDecision).toHaveBeenCalledTimes(1);
     const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
@@ -277,7 +279,7 @@ describe('ReplayIncidentDossier', () => {
     const { saveStewardDecision } = renderDossier();
 
     fireEvent.click(screen.getByText('Antares Au'));
-    fireEvent.click(screen.getByText('10s Penalty'));
+    fireEvent.click(screen.getByText('10s penalty'));
 
     const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
 
@@ -285,7 +287,7 @@ describe('ReplayIncidentDossier', () => {
     expect(saved.replayHash).toBe('hash-p1-7');
     // The label is the value: what the button said is what the record carries
     // and what an export prints, with no lookup table in between.
-    expect(saved.outcome).toBe('10s Penalty');
+    expect(saved.outcome).toBe('10s penalty');
     expect(saved.state).toBe('DECIDED');
   });
 
@@ -300,11 +302,13 @@ describe('ReplayIncidentDossier', () => {
     const { saveStewardDecision } = renderDossier();
 
     fireEvent.click(screen.getByText('Antares Au'));
-    fireEvent.click(screen.getByText('No Action'));
+    fireEvent.click(
+      screen.getByText('Racing incident: No investigation necessary'),
+    );
 
     const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
 
-    expect(saved.outcome).toBe('No Action');
+    expect(saved.outcome).toBe('Racing incident: No investigation necessary');
     expect(saved.target).toBeUndefined();
   });
 
@@ -312,7 +316,7 @@ describe('ReplayIncidentDossier', () => {
   it('refuses a driver-scoped penalty with no target chosen', () => {
     const { saveStewardDecision } = renderDossier();
 
-    fireEvent.click(screen.getByText('5s Penalty'));
+    fireEvent.click(screen.getByText('5s penalty'));
 
     expect(saveStewardDecision).not.toHaveBeenCalled();
   });
@@ -362,7 +366,7 @@ describe('ReplayIncidentDossier', () => {
             sessionKey: SESSION_KEY,
             state: 'DECIDED',
             status: 'provisional',
-            outcome: '5s Penalty',
+            outcome: '5s penalty',
             reasoning,
             basis: 'incident',
             involvedParties: [],
@@ -393,7 +397,9 @@ describe('ReplayIncidentDossier', () => {
       fireEvent.change(note(), {
         target: { value: 'Reviewed on the replay — contact was avoidable' },
       });
-      fireEvent.click(screen.getByText('No Action'));
+      fireEvent.click(
+        screen.getByText('Racing incident: No investigation necessary'),
+      );
 
       const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
       expect(saved.reasoning).toBe(
@@ -408,7 +414,9 @@ describe('ReplayIncidentDossier', () => {
     it('does not wipe the live note when the call is confirmed untouched', () => {
       const { saveStewardDecision } = withLiveCall('Called live');
 
-      fireEvent.click(screen.getByText('No Action'));
+      fireEvent.click(
+        screen.getByText('Racing incident: No investigation necessary'),
+      );
 
       const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
       expect(saved.reasoning).toBe('Called live');
@@ -418,7 +426,9 @@ describe('ReplayIncidentDossier', () => {
       const { saveStewardDecision } = renderDossier();
 
       fireEvent.change(note(), { target: { value: '   ' } });
-      fireEvent.click(screen.getByText('No Action'));
+      fireEvent.click(
+        screen.getByText('Racing incident: No investigation necessary'),
+      );
 
       const saved = saveStewardDecision.mock.calls[0][0] as StewardDecision;
       expect(saved.reasoning).toBeUndefined();

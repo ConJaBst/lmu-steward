@@ -223,7 +223,7 @@ describe('LiveIncidentDossier decision targeting', () => {
     renderWithTarget(undefined);
 
     expect(screen.getByText(/select a driver above/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /5s Penalty/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /5s penalty/ })).toBeDisabled();
   });
 
   it('should name the driver a penalty would apply to', () => {
@@ -232,7 +232,7 @@ describe('LiveIncidentDossier decision targeting', () => {
     expect(
       screen.getByText(/Penalty applies to Bradley Drake/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /5s Penalty/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /5s penalty/ })).toBeEnabled();
   });
 
   // "No action" is a finding about the incident, not about one driver, so it
@@ -240,7 +240,11 @@ describe('LiveIncidentDossier decision targeting', () => {
   it('should keep incident-scoped outcomes available without a target', () => {
     renderWithTarget(undefined);
 
-    expect(screen.getByRole('button', { name: /No Action/ })).toBeEnabled();
+    expect(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    ).toBeEnabled();
   });
 
   /*
@@ -324,7 +328,7 @@ describe('LiveIncidentDossier prior calls', () => {
     incidentId: 'inc-9000',
     lapLabel: 'L12',
     state: 'DECIDED',
-    outcome: '10s Penalty',
+    outcome: '10s penalty',
     wasTarget: true,
     decidedAt: 1,
     ...over,
@@ -362,7 +366,7 @@ describe('LiveIncidentDossier prior calls', () => {
     );
 
     const row = screen.getByTestId(`prior-calls-${drake.steamId}`);
-    expect(within(row).getByText('L12 · 10s Penalty')).toBeInTheDocument();
+    expect(within(row).getByText('L12 · 10s penalty')).toBeInTheDocument();
     expect(within(row).getByText('L20 · Flagged')).toBeInTheDocument();
   });
 
@@ -447,7 +451,11 @@ describe('LiveIncidentDossier reasoning capture', () => {
 
     expect(onChangeReasoning).toHaveBeenCalledWith('Dived from too far back');
     // Nothing is gated on it — an empty reason must never block a call.
-    expect(screen.getByRole('button', { name: /No Action/ })).toBeEnabled();
+    expect(
+      screen.getByRole('button', {
+        name: /Racing incident: No investigation necessary/,
+      }),
+    ).toBeEnabled();
   });
 
   // The replay dossier passes no handler: reviewing there revises a record that

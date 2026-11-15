@@ -663,6 +663,10 @@ export interface LiveCaptureIncident {
   warningPoints?: number;
   currentPoints?: number;
   resolution?: string;
+  /** Penalty only: `Stop/Go`, `Drive Thru`, as the game words it. */
+  penaltyType?: string;
+  /** Penalty only: why the game gave it, e.g. `Speeding In Pitlane`. */
+  penaltyReason?: string;
   lap?: number;
   /**
    * Sidecar-assigned sequence number. Contexts arrive seconds after the event
@@ -974,6 +978,8 @@ export interface LiveSessionData {
   drivers: LiveCaptureDriver[];
   incidents: LiveCaptureIncident[];
   trackLimitStepsPerPenalty?: number;
+  /** Steps in one track-limit point. Absent from an older capture process. */
+  trackLimitStepsPerPoint?: number;
   battles: LivePressureBattle[];
   /**
    * The session's persisted key.

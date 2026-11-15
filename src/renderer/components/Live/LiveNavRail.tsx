@@ -8,6 +8,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
+import GppMaybeOutlinedIcon from '@mui/icons-material/GppMaybeOutlined';
+import PolylineOutlinedIcon from '@mui/icons-material/PolylineOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
@@ -37,6 +40,12 @@ export const LIVE_NAV_ITEMS: LiveNavItem[] = [
     hint: 'Session at a glance',
   },
   {
+    to: '/live/steward',
+    label: 'Steward',
+    icon: <GavelOutlinedIcon fontSize="small" />,
+    hint: 'Live steward: incidents, with timing and the map between them',
+  },
+  {
     to: '/live/incidents',
     label: 'Incidents',
     icon: <ReportProblemOutlinedIcon fontSize="small" />,
@@ -47,6 +56,18 @@ export const LIVE_NAV_ITEMS: LiveNavItem[] = [
     label: 'Timing',
     icon: <TimerOutlinedIcon fontSize="small" />,
     hint: 'Live timing, sectors and the class filter',
+  },
+  {
+    to: '/live/track-limits',
+    label: 'Track limits',
+    icon: <PolylineOutlinedIcon fontSize="small" />,
+    hint: 'Every driver, by how close they are to a track-limits penalty',
+  },
+  {
+    to: '/live/penalties',
+    label: 'Penalties',
+    icon: <GppMaybeOutlinedIcon fontSize="small" />,
+    hint: 'Who has a penalty to serve, and server commands for any driver',
   },
 ];
 

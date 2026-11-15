@@ -19,6 +19,9 @@ import { LiveShell } from './views/Live/LiveShell';
 import { LiveOverview } from './views/Live/LiveOverview';
 import { LiveIncidents } from './views/Live/LiveIncidents';
 import { LiveTiming } from './views/Live/LiveTiming';
+import { LiveSteward } from './views/Live/LiveSteward';
+import { LivePenalties } from './views/Live/LivePenalties';
+import { LiveTrackLimits } from './views/Live/LiveTrackLimits';
 import { CapturedSessionsView } from './views/CapturedSessions';
 import { DriverDashboardView } from './views/DriverDashboard';
 import { UserSettingsView } from './views/UserSettings';
@@ -97,8 +100,11 @@ const AppRoutesShell = () => {
           */}
           <Route path="/live" element={<LiveShell />}>
             <Route index element={<LiveOverview />} />
+            <Route path="steward" element={<LiveSteward />} />
             <Route path="incidents" element={<LiveIncidents />} />
             <Route path="timing" element={<LiveTiming />} />
+            <Route path="track-limits" element={<LiveTrackLimits />} />
+            <Route path="penalties" element={<LivePenalties />} />
           </Route>
           <Route path="/captured-sessions" element={<CapturedSessionsView />} />
           <Route path="/user-settings" element={<UserSettingsView />} />

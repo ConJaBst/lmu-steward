@@ -20,7 +20,13 @@ import {
   tallyByDriver,
   toCarClassCode,
   toSessionPhase,
+  isStewardWorthy,
 } from './useLiveSessionData';
+import {
+  formatTrackLimitStanding,
+  trackLimitPointsLimit,
+  trackLimitProgress,
+} from '../utils/trackLimits';
 
 const driver = (
   overrides: Partial<LiveCaptureDriver> & { slotId: number },
@@ -235,7 +241,10 @@ describe('buildIncidentsCached', () => {
     buildIncidentsCached(nextTick(), drivers, cache);
     buildIncidentsCached(nextTick().slice(0, 5), drivers, cache);
 
-    expect(cache.byId.size).toBe(5);
+    // Only what belongs in the queue is built, so only that is cached.
+    expect(cache.byId.size).toBe(
+      nextTick().slice(0, 5).filter(isStewardWorthy).length,
+    );
   });
 
   it('should agree with the uncached builder', () => {
@@ -337,6 +346,8 @@ describe('buildSessionState', () => {
       timeRemainingSeconds: 9174,
       lapsCompleted: 4,
       trackLimitStepsPerPenalty: 40,
+      // 40 steps at the assumed four steps to the point.
+      trackLimitPointsLimit: 10,
       connected: true,
     });
   });
@@ -607,5 +618,99 @@ describe('buildStandings timing', () => {
     expect(positioned.posZ).toBe(-1180.3);
     expect(unpositioned.posX).toBeUndefined();
     expect(unpositioned.posZ).toBeUndefined();
+  });
+});
+
+describe('what reaches the steward queue', () => {
+  const drivers = [driver({ slotId: 3 }), driver({ slotId: 4 })];
+
+  const penalty = (
+    over: Partial<LiveCaptureIncident> = {},
+  ): LiveCaptureIncident => ({
+    id: 'pen-1',
+    kind: 'penalty',
+    etSeconds: 50,
+    raw: '<Penalty Driver="Driver 3" ID="3" Penalty="Stop/Go" Reason="Speeding In Pitlane" et="50.0">issued</Penalty>',
+    parties: [{ slotId: 3, displayName: 'Driver 3' }],
+    penaltyType: 'Stop/Go',
+    penaltyReason: 'Speeding In Pitlane',
+    ...over,
+  });
+
+  // The game warns first and only adds points if the advantage is kept.
+  it('should drop a track-limit message that added no points', () => {
+    const built = buildIncidents(
+      [trackLimit(3, 0, 1.25), trackLimit(4, 1, 2.25)],
+      drivers,
+    );
+
+    expect(built).toHaveLength(1);
+    expect(built[0].drivers[0].slotId).toBe(4);
+  });
+
+  it('should carry the points added and the running total', () => {
+    const [built] = buildIncidents([trackLimit(4, 1, 2.25)], drivers);
+
+    expect(built.classification).toBe('track-limits');
+    expect(built.trackLimit).toEqual({ added: 1, current: 2.25 });
+  });
+
+  // No figure at all is an old capture, not a zero.
+  it('should keep a track-limit message that carries no points figure', () => {
+    const legacy: LiveCaptureIncident = {
+      ...trackLimit(4, 1, 2),
+      warningPoints: undefined,
+    };
+
+    expect(isStewardWorthy(legacy)).toBe(true);
+  });
+
+  // The forgiven off still carries the driver's freshest total.
+  it('should still read the running total from a message that added nothing', () => {
+    const tallies = tallyByDriver([
+      trackLimit(3, 1, 1.25),
+      trackLimit(3, 0, 1.25),
+    ]);
+
+    expect(tallies.get(3)?.trackLimits).toBe(1);
+    expect(tallies.get(3)?.points).toBe(1.25);
+  });
+
+  it('should list a penalty as a penalty, not as contact', () => {
+    const [built] = buildIncidents([penalty()], drivers);
+
+    expect(built.classification).toBe('penalty');
+    expect(built.penalty).toEqual({
+      type: 'Stop/Go',
+      reason: 'Speeding In Pitlane',
+    });
+    expect(built.drivers[0].slotId).toBe(3);
+  });
+
+  // "served 1st Stop/Go penalty" names nobody; the penalty itself is the event.
+  it('should drop the follow-up notes that come after a penalty', () => {
+    const served = penalty({
+      id: 'pen-2',
+      parties: [],
+      penaltyType: undefined,
+    });
+
+    expect(buildIncidents([penalty(), served], drivers)).toHaveLength(1);
+  });
+
+  it('should work out the points limit from the steps', () => {
+    expect(trackLimitPointsLimit(16, 4)).toBe(4);
+    // An older capture process does not send the second number.
+    expect(trackLimitPointsLimit(16)).toBe(4);
+    expect(trackLimitPointsLimit(0, 4)).toBeUndefined();
+    expect(trackLimitPointsLimit(undefined)).toBeUndefined();
+  });
+
+  it('should word a standing without padding', () => {
+    expect(formatTrackLimitStanding(2.25, 4)).toBe('2.25 / 4');
+    expect(formatTrackLimitStanding(3, undefined)).toBe('3');
+    expect(trackLimitProgress(3, 4)).toBe(0.75);
+    expect(trackLimitProgress(9, 4)).toBe(1);
+    expect(trackLimitProgress(2, undefined)).toBe(0);
   });
 });

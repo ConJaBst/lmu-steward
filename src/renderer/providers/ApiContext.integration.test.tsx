@@ -359,7 +359,7 @@ describe('ApiContext integration', () => {
   */
   describe('the tariff both dossiers are offered', () => {
     const SHIPPED =
-      '5s Penalty/driver, 10s Penalty/driver, Drive-Through/driver, No Action/incident, Note Only/incident';
+      'Racing incident: No investigation necessary/incident, Under investigation/incident, 5s penalty/driver, 10s penalty/driver, 20s penalty/driver, Drive Through/driver, Disqualified/driver';
 
     it('should carry the configured list from settings', async () => {
       render(

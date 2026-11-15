@@ -71,6 +71,36 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
    * value and does not interpret it.
    */
   stewardActions: null,
+  /**
+   * The line the steward announces themselves with in the in-game chat. Empty
+   * means "use the shipped wording", resolved in the renderer's
+   * `stewardChat.ts` — the same arrangement as `stewardAuthorName`.
+   */
+  stewardAnnouncementMessage: '',
+  /**
+   * Whether a call is posted to the in-game chat the moment it is made. Off by
+   * default: a chat line goes to every driver in the session and cannot be
+   * taken back, so sending one without a second look is opt-in.
+   */
+  stewardChatAutosend: false,
+  /**
+   * The contact magnitude at which the live steward screen's auto replay takes
+   * the game's picture to a new incident. Resolved in the renderer's
+   * `liveAutoReplay.ts`, which also holds the shipped value.
+   */
+  liveAutoReplayMinMagnitude: 200,
+  /**
+   * How long a new in-game chat message stays on the live screen, in seconds.
+   * 0 means it stays until newer messages push it off. Resolved in the
+   * renderer's `liveChatFeed.ts`.
+   */
+  liveChatFeedVisibleSeconds: 15,
+  /**
+   * The SimGrid Server Commands page for the event being stewarded — the
+   * address, or just its id. Empty means the SimGrid connector is off. See
+   * `simgrid.ts`.
+   */
+  simgridServerCommandsUrl: '',
 };
 
 /** The windows offered, longest-lived last. `null` is "never delete". */

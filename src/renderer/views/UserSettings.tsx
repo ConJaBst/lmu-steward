@@ -30,6 +30,17 @@ import {
   toStoredStewardActions,
 } from '../utils/stewardActions';
 import { StewardActionsEditor } from '../components/UserSettings/StewardActionsEditor';
+import { SimgridConnectorSettings } from '../components/UserSettings/SimgridConnectorSettings';
+import {
+  DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE,
+  MAX_AUTO_REPLAY_MIN_MAGNITUDE,
+  resolveAutoReplayMinMagnitude,
+} from '../utils/liveAutoReplay';
+import {
+  DEFAULT_CHAT_FEED_VISIBLE_SECONDS,
+  MAX_CHAT_FEED_VISIBLE_SECONDS,
+  resolveChatFeedVisibleSeconds,
+} from '../utils/liveChatFeed';
 import {
   LONGEST_COUNTRY_NAME,
   LMU_LAUNCH_COOLDOWN_MS,
@@ -152,6 +163,20 @@ export const UserSettingsView: React.FC = () => {
   const [stewardActionsDraft, setStewardActionsDraft] = useState<
     StewardAction[] | null
   >(null);
+  // Held untrimmed while typing, like the steward's name.
+  const [stewardAnnouncementMessage, setStewardAnnouncementMessage] =
+    useState('');
+  /*
+    Held as typed, so the field can be emptied on the way to a new number
+    without snapping back. Resolved to a number where it leaves for the store.
+  */
+  const [autoReplayMagnitudeInput, setAutoReplayMagnitudeInput] = useState(
+    String(DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE),
+  );
+  // Held as typed, for the same reason.
+  const [chatFeedSecondsInput, setChatFeedSecondsInput] = useState(
+    String(DEFAULT_CHAT_FEED_VISIBLE_SECONDS),
+  );
   /*
     Shortening the window deletes data, so the change is held here until the
     user has seen what it would remove and confirmed it. Lengthening never
@@ -250,6 +275,12 @@ export const UserSettingsView: React.FC = () => {
       () => toStoredStewardActions(stewardActionsDraft),
       [stewardActionsDraft],
     ),
+    stewardAnnouncementMessage,
+    liveAutoReplayMinMagnitude: resolveAutoReplayMinMagnitude(
+      autoReplayMagnitudeInput,
+    ),
+    liveChatFeedVisibleSeconds:
+      resolveChatFeedVisibleSeconds(chatFeedSecondsInput),
     // replayLogMatchThresholdMinutes,
     anonymizeDriverData,
     telemetryCacheEnabled,
@@ -395,6 +426,16 @@ export const UserSettingsView: React.FC = () => {
       const resolvedStewardActions = toStoredStewardActions(
         response?.data?.stewardActions,
       );
+      const resolvedStewardAnnouncementMessage =
+        typeof response?.data?.stewardAnnouncementMessage === 'string'
+          ? response.data.stewardAnnouncementMessage.trim()
+          : '';
+      const resolvedAutoReplayMinMagnitude = resolveAutoReplayMinMagnitude(
+        response?.data?.liveAutoReplayMinMagnitude,
+      );
+      const resolvedChatFeedVisibleSeconds = resolveChatFeedVisibleSeconds(
+        response?.data?.liveChatFeedVisibleSeconds,
+      );
       const resolvedAnonymizeDriverData = Boolean(
         response?.data?.anonymizeDriverData ?? false,
       );
@@ -427,6 +468,9 @@ export const UserSettingsView: React.FC = () => {
       );
       setStewardAuthorName(resolvedStewardAuthorName);
       setStewardActionsDraft(resolvedStewardActions);
+      setStewardAnnouncementMessage(resolvedStewardAnnouncementMessage);
+      setAutoReplayMagnitudeInput(String(resolvedAutoReplayMinMagnitude));
+      setChatFeedSecondsInput(String(resolvedChatFeedVisibleSeconds));
       setAnonymizeDriverData(resolvedAnonymizeDriverData);
       setTelemetryCacheEnabled(resolvedTelemetryCacheEnabled);
       setClearCacheOnExit(resolvedClearCacheOnExit);
@@ -445,6 +489,9 @@ export const UserSettingsView: React.FC = () => {
         liveCaptureEnabled: resolvedLiveCaptureEnabled,
         stewardAuthorName: resolvedStewardAuthorName,
         stewardActions: resolvedStewardActions,
+        stewardAnnouncementMessage: resolvedStewardAnnouncementMessage,
+        liveAutoReplayMinMagnitude: resolvedAutoReplayMinMagnitude,
+        liveChatFeedVisibleSeconds: resolvedChatFeedVisibleSeconds,
         // replayLogMatchThresholdMinutes: resolvedReplayLogMatchThresholdMinutes,
         anonymizeDriverData: resolvedAnonymizeDriverData,
         telemetryCacheEnabled: resolvedTelemetryCacheEnabled,
@@ -1885,6 +1932,102 @@ export const UserSettingsView: React.FC = () => {
                 isAtDefaults={areStewardActionsDefault(editedStewardActions)}
                 onChange={setStewardActionsDraft}
                 onRevert={() => setStewardActionsDraft(null)}
+                announcement={stewardAnnouncementMessage}
+                onChangeAnnouncement={setStewardAnnouncementMessage}
+                stewardName={stewardAuthorName}
+                disabled={isLoading || isSaving || isLaunching}
+              />
+
+              <Box
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 2,
+                }}
+              >
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
+                  <Box sx={{ pr: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      Auto Replay Magnitude
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      With Auto replay switched on, on the Live Steward screen,
+                      a new incident at or above this contact magnitude opens
+                      there and rewinds the game&apos;s picture to it. Lower
+                      catches lighter contact; higher only the heavy ones. Left
+                      blank, {DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE} is used.
+                    </Typography>
+                  </Box>
+                  <TextField
+                    size="small"
+                    type="number"
+                    sx={{ minWidth: 140 }}
+                    value={autoReplayMagnitudeInput}
+                    placeholder={String(DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE)}
+                    inputProps={{
+                      min: 0,
+                      max: MAX_AUTO_REPLAY_MIN_MAGNITUDE,
+                      step: 50,
+                      'aria-label': 'Auto replay magnitude',
+                    }}
+                    onChange={(changeEvent) =>
+                      setAutoReplayMagnitudeInput(changeEvent.target.value)
+                    }
+                    disabled={isLoading || isSaving || isLaunching}
+                  />
+                </Stack>
+              </Box>
+
+              <Box
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 2,
+                }}
+              >
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
+                  <Box sx={{ pr: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      Chat Message Display Time
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      How many seconds a new in-game chat message stays on the
+                      live screen, beside the circuit name. Set it to 0 and a
+                      message stays until newer ones push it off. Left blank,{' '}
+                      {DEFAULT_CHAT_FEED_VISIBLE_SECONDS} seconds is used.
+                    </Typography>
+                  </Box>
+                  <TextField
+                    size="small"
+                    type="number"
+                    sx={{ minWidth: 140 }}
+                    value={chatFeedSecondsInput}
+                    placeholder={String(DEFAULT_CHAT_FEED_VISIBLE_SECONDS)}
+                    inputProps={{
+                      min: 0,
+                      max: MAX_CHAT_FEED_VISIBLE_SECONDS,
+                      step: 5,
+                      'aria-label': 'Chat message display time',
+                    }}
+                    onChange={(changeEvent) =>
+                      setChatFeedSecondsInput(changeEvent.target.value)
+                    }
+                    disabled={isLoading || isSaving || isLaunching}
+                  />
+                </Stack>
+              </Box>
+
+              <SimgridConnectorSettings
                 disabled={isLoading || isSaving || isLaunching}
               />
 
