@@ -1,4 +1,9 @@
 import { StewardDecisionOutcome } from '@types';
+import {
+  StewardServerCommand,
+  sanitizeServerCommand,
+  serverCommandsEqual,
+} from './simgridCommands';
 
 /**
  * The actions a steward can record against an incident — the penalty tariff.
@@ -60,6 +65,13 @@ export interface StewardAction {
    * Like `id`, it never reaches a decision record — the label does.
    */
   chatLabel?: string;
+  /**
+   * The penalty to apply on the server when this action is called, through the
+   * SimGrid connector. Optional, and absent means the action is a record and a
+   * chat line only. Only meaningful on a call against one driver, and never
+   * applied without the steward confirming it.
+   */
+  serverCommand?: StewardServerCommand;
 }
 
 /** What the chat line says for this action. */
@@ -86,11 +98,36 @@ export const DEFAULT_STEWARD_ACTIONS: readonly StewardAction[] = [
     driverScoped: false,
     chatLabel: 'Under Investigation',
   },
-  { id: 'sa-5s', label: '5s penalty', driverScoped: true },
-  { id: 'sa-10s', label: '10s penalty', driverScoped: true },
-  { id: 'sa-20s', label: '20s penalty', driverScoped: true },
-  { id: 'sa-drive-through', label: 'Drive Through', driverScoped: true },
-  { id: 'sa-disqualified', label: 'Disqualified', driverScoped: true },
+  {
+    id: 'sa-5s',
+    label: '5s penalty',
+    driverScoped: true,
+    serverCommand: { kind: 'time-penalty', seconds: 5 },
+  },
+  {
+    id: 'sa-10s',
+    label: '10s penalty',
+    driverScoped: true,
+    serverCommand: { kind: 'time-penalty', seconds: 10 },
+  },
+  {
+    id: 'sa-20s',
+    label: '20s penalty',
+    driverScoped: true,
+    serverCommand: { kind: 'time-penalty', seconds: 20 },
+  },
+  {
+    id: 'sa-drive-through',
+    label: 'Drive Through',
+    driverScoped: true,
+    serverCommand: { kind: 'drive-through' },
+  },
+  {
+    id: 'sa-disqualified',
+    label: 'Disqualified',
+    driverScoped: true,
+    serverCommand: { kind: 'disqualify' },
+  },
 ];
 
 /**
@@ -182,6 +219,8 @@ const sanitizeStewardActions = (value: unknown): StewardAction[] => {
         ? entry.chatLabel.trim().slice(0, MAX_STEWARD_ACTION_LABEL_LENGTH)
         : '';
 
+    const serverCommand = sanitizeServerCommand(entry.serverCommand);
+
     actions.push({
       id,
       label,
@@ -193,6 +232,11 @@ const sanitizeStewardActions = (value: unknown): StewardAction[] => {
         penalty nobody can act on.
       */
       driverScoped: entry.driverScoped !== false,
+      // Dropped unless the action is against a driver: a server penalty has to
+      // land on somebody.
+      ...(entry.driverScoped !== false && serverCommand
+        ? { serverCommand }
+        : {}),
     });
 
     return actions;
@@ -210,7 +254,11 @@ export const areStewardActionsDefault = (
         labelKey(DEFAULT_STEWARD_ACTIONS[index].label) &&
       action.driverScoped === DEFAULT_STEWARD_ACTIONS[index].driverScoped &&
       stewardActionChatLabel(action) ===
-        stewardActionChatLabel(DEFAULT_STEWARD_ACTIONS[index]),
+        stewardActionChatLabel(DEFAULT_STEWARD_ACTIONS[index]) &&
+      serverCommandsEqual(
+        action.driverScoped ? action.serverCommand : undefined,
+        DEFAULT_STEWARD_ACTIONS[index].serverCommand,
+      ),
   );
 
 /**

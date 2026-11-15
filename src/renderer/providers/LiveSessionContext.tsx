@@ -24,6 +24,14 @@ import {
 } from '../utils/stewardDecisionState';
 import { useApi } from './ApiContext';
 import {
+  describeServerCommand,
+  toSimgridCommand,
+} from '../utils/simgridCommands';
+import {
+  LivePenaltyHistory,
+  useLivePenaltyHistory,
+} from '../hooks/useLivePenaltyHistory';
+import {
   formatDecisionChatMessage,
   resolveStewardAnnouncement,
 } from '../utils/stewardChat';
@@ -603,6 +611,21 @@ export interface LiveSessionContextValue {
     outcome: LiveDecisionOutcome,
     custom?: { targetSteamId: string; reasoning: string },
   ) => void;
+  /**
+   * A server command waiting on the steward's say-so — after a call whose
+   * action carries a penalty, or asked for from the penalties tab. Never sent
+   * without `onApplyServerPenalty`.
+   */
+  pendingServerPenalty?: LiveServerCommandRequest & {
+    /** The decision this follows, when it follows one. */
+    outcome?: string;
+  };
+  /** Ask to send a server command. Opens the confirmation; sends nothing. */
+  onRequestServerCommand: (request: LiveServerCommandRequest) => void;
+  /** Penalties outstanding and cleared per car; see `useLivePenaltyHistory`. */
+  penaltyHistory: LivePenaltyHistory;
+  onApplyServerPenalty: () => void;
+  onDismissServerPenalty: () => void;
   /** The message waiting in the chat box. */
   chatDraft: string;
   /** Whether calls post to the in-game chat the moment they are made. */
@@ -612,6 +635,18 @@ export interface LiveSessionContextValue {
   onAnnounce: () => void;
   onToggleChatAutosend: (enabled: boolean) => void;
 }
+
+/** One command for one driver, worded for the steward to read back. */
+export interface LiveServerCommandRequest {
+  driverName: string;
+  carNumber: string;
+  /** `5s time penalty`, `Add Penalty: Drive-thru` — shown in the confirmation. */
+  description: string;
+  /** What goes to SimGrid; see `src/main/api/simgrid.ts`. */
+  simgrid: { command: string; code?: number };
+}
+
+const NO_STANDINGS: LiveStanding[] = [];
 
 const LiveSessionContext = createContext<LiveSessionContextValue | undefined>(
   undefined,
@@ -632,6 +667,7 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     stewardAnnouncementTemplate,
     stewardChatAutosend,
     setStewardChatAutosend,
+    simgridServerCommandsUrl,
   } = useApi();
 
   /*
@@ -704,6 +740,8 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   // reason left over from the last incident is worse than none.
   const [reasoningDraft, setReasoningDraft] = useState('');
   const [chatDraft, setChatDraft] = useState('');
+  const [pendingServerPenalty, setPendingServerPenalty] =
+    useState<LiveSessionContextValue['pendingServerPenalty']>(undefined);
   const [autoReplay, setAutoReplay] = useState(false);
 
   /*
@@ -1002,6 +1040,12 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     during render, matching `useLiveIncidentContext`'s `wanted` ref: a keypress
     or a click always reads the render that is on screen.
   */
+  // Against the running session only: a record being read back has no "now".
+  const penaltyHistory = useLivePenaltyHistory(
+    activeSessionKey ?? sessionKey,
+    isReviewingRecord ? NO_STANDINGS : standings,
+  );
+
   const latest = useRef({
     incidents,
     decisionIdentity,
@@ -1019,6 +1063,8 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     stewardAnnouncementTemplate,
     stewardChatAutosend,
     isReviewingRecord,
+    simgridServerCommandsUrl,
+    pendingServerPenalty,
   });
   latest.current = {
     incidents,
@@ -1037,7 +1083,37 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     stewardAnnouncementTemplate,
     stewardChatAutosend,
     isReviewingRecord,
+    simgridServerCommandsUrl,
+    pendingServerPenalty,
   };
+
+  /*
+    The SimGrid connector's half of a call.
+
+    A decision is recorded the moment it is made. Penalising the car on the
+    server is a second, separate act, and it is only ever *offered*: the prompt
+    names the driver and the penalty, and nothing is sent until the steward
+    presses Apply. See `LiveServerPenaltyPrompt` and `src/main/api/simgrid.ts`.
+  */
+  const onApplyServerPenalty = useCallback(() => {
+    const pending = latest.current.pendingServerPenalty;
+    if (!pending) {
+      return;
+    }
+    sendMessage(CONSTANTS.API.POST_SIMGRID_COMMAND, {
+      ...pending.simgrid,
+      driver: pending.driverName,
+    });
+    setPendingServerPenalty(undefined);
+  }, []);
+  const onDismissServerPenalty = useCallback(
+    () => setPendingServerPenalty(undefined),
+    [],
+  );
+  const onRequestServerCommand = useCallback(
+    (request: LiveServerCommandRequest) => setPendingServerPenalty(request),
+    [],
+  );
 
   /*
     The in-game chat.
@@ -1238,6 +1314,7 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
         effectiveTargetSteamId: selectedTarget,
         reasoningDraft: draftedReasoning,
         isReviewingRecord: heldReviewingRecord,
+        simgridServerCommandsUrl: heldSimgridUrl,
       } = latest.current;
       const incident = held.find((entry) => entry.id === incidentId);
       if (!incident) {
@@ -1314,6 +1391,30 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
         finished segment, where the chat belongs to a different session than the
         incident does.
       */
+      /*
+        Offer the server penalty, where the action has one and the connector is
+        set up. Offered, not applied — and not for a call being taken back, nor
+        against a finished segment, where the server is no longer that session.
+      */
+      const serverCommand = heldActions.find(
+        (action) => action.label === outcome && action.driverScoped,
+      )?.serverCommand;
+      if (
+        !isSameCall &&
+        !heldReviewingRecord &&
+        target &&
+        serverCommand &&
+        (heldSimgridUrl ?? '').trim()
+      ) {
+        setPendingServerPenalty({
+          driverName: target.displayName,
+          carNumber: target.carNumber,
+          outcome,
+          description: describeServerCommand(serverCommand),
+          simgrid: toSimgridCommand(serverCommand),
+        });
+      }
+
       if (
         !isSameCall &&
         !heldReviewingRecord &&
@@ -1524,6 +1625,10 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
         it. Without this, typing "contact at turn 1" into the reasoning box
         would issue a drive-through on the `3` and flag the incident on the `f`.
       */
+      // A question is on screen; a keystroke must not make another call.
+      if (latest.current.pendingServerPenalty) {
+        return;
+      }
       const source = event.target as HTMLElement | null;
       if (
         source?.isContentEditable ||
@@ -1636,6 +1741,11 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
       onFlag,
       onDefer,
       onDecide,
+      pendingServerPenalty,
+      onApplyServerPenalty,
+      onDismissServerPenalty,
+      onRequestServerCommand,
+      penaltyHistory,
       chatDraft,
       chatAutosend: stewardChatAutosend,
       onChangeChatDraft: setChatDraft,
@@ -1669,6 +1779,11 @@ export const LiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
       liveUnreviewedCount,
       onChangeIncidentFilters,
       onDecide,
+      pendingServerPenalty,
+      onApplyServerPenalty,
+      onDismissServerPenalty,
+      onRequestServerCommand,
+      penaltyHistory,
       chatDraft,
       stewardChatAutosend,
       onSendChat,

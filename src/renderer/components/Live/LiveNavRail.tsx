@@ -9,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
+import GppMaybeOutlinedIcon from '@mui/icons-material/GppMaybeOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
@@ -54,6 +55,12 @@ export const LIVE_NAV_ITEMS: LiveNavItem[] = [
     label: 'Timing',
     icon: <TimerOutlinedIcon fontSize="small" />,
     hint: 'Live timing, sectors and the class filter',
+  },
+  {
+    to: '/live/penalties',
+    label: 'Penalties',
+    icon: <GppMaybeOutlinedIcon fontSize="small" />,
+    hint: 'Who has a penalty to serve, and server commands for any driver',
   },
 ];
 

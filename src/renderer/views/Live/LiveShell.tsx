@@ -10,6 +10,7 @@ import {
   LiveChatBar,
 } from '../../components/Live/LiveChatBar';
 import { LiveChatFeed } from '../../components/Live/LiveChatFeed';
+import { LiveServerPenaltyPrompt } from '../../components/Live/LiveServerPenaltyPrompt';
 import {
   LIVE_CAMERA_BAR_HEIGHT,
   LiveCameraControls,
@@ -231,6 +232,9 @@ const LiveShellBody: React.FC = () => {
         messages appear in, so reading the chat and answering it are one place.
       */}
       {isReviewingRecord ? null : <LiveChatBar />}
+
+      {/* Asks before a call's server penalty goes to SimGrid. */}
+      <LiveServerPenaltyPrompt />
 
       {/*
         Above the rail, not inside a route: this is the session's general

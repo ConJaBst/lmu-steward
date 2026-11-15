@@ -57,6 +57,12 @@ import {
   postStewardChatMessage,
 } from './api/steward-chat';
 import {
+  SimgridCommandRequest,
+  getSimgridStatus,
+  postSimgridCommand,
+  postSimgridSignIn,
+} from './api/simgrid';
+import {
   getReplays,
   getIsReplayActive,
   postArchiveNote,
@@ -334,6 +340,10 @@ const CHANNEL_CALLBACK_HANDLERS: Partial<
   [CONSTANTS.API.POST_STEWARD_DECISION]: withEventAndData<StewardDecision>(
     postStewardDecisionHandler,
   ),
+  [CONSTANTS.API.GET_SIMGRID_STATUS]: withEventOnly(getSimgridStatus),
+  [CONSTANTS.API.POST_SIMGRID_SIGN_IN]: withEventOnly(postSimgridSignIn),
+  [CONSTANTS.API.POST_SIMGRID_COMMAND]:
+    withEventAndData<SimgridCommandRequest>(postSimgridCommand),
   [CONSTANTS.API.GET_STEWARD_CHAT_MESSAGES]: withEventOnly(
     getStewardChatMessages,
   ),

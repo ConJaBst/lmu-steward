@@ -346,3 +346,90 @@ describe('the chat bar', () => {
     expect(chatBox().value).toBe('Pit lane is open');
   });
 });
+
+describe('applying a call on the server', () => {
+  const LINK =
+    'https://www.thesimgrid.com/admin/race_server_configs/1/modules/server_commands';
+
+  const simgridPosts = () =>
+    sendMessageMock.mock.calls.filter(
+      ([channel]) => channel === CONSTANTS.API.POST_SIMGRID_COMMAND,
+    );
+
+  /** A 5s penalty against the second driver, through the custom call. */
+  const callFiveSeconds = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    fireEvent.change(screen.getByLabelText('Custom decision driver'), {
+      target: { value: second.steamId },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  };
+
+  it('should ask before applying, and send nothing until told to', () => {
+    setApi({ simgridServerCommandsUrl: LINK });
+    renderLive();
+    selectIncident();
+
+    callFiveSeconds();
+
+    expect(screen.getByText('Send this to the server?')).toBeInTheDocument();
+    expect(screen.getByText('5s time penalty')).toBeInTheDocument();
+    // The decision is recorded either way; the server has heard nothing.
+    expect(saveStewardDecision).toHaveBeenCalledTimes(1);
+    expect(simgridPosts()).toHaveLength(0);
+  });
+
+  it('should send the penalty to SimGrid when the steward applies it', () => {
+    setApi({ simgridServerCommandsUrl: LINK });
+    renderLive();
+    selectIncident();
+    callFiveSeconds();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply on server' }));
+
+    expect(simgridPosts()).toEqual([
+      [
+        CONSTANTS.API.POST_SIMGRID_COMMAND,
+        { command: 'add_time_penalty', code: 5, driver: second.displayName },
+      ],
+    ]);
+  });
+
+  it('should send nothing when the steward declines', () => {
+    setApi({ simgridServerCommandsUrl: LINK });
+    renderLive();
+    selectIncident();
+    callFiveSeconds();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+
+    expect(simgridPosts()).toHaveLength(0);
+    expect(saveStewardDecision).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not ask when the connector is not set up', () => {
+    renderLive();
+    selectIncident();
+
+    callFiveSeconds();
+
+    expect(
+      screen.queryByText('Send this to the server?'),
+    ).not.toBeInTheDocument();
+  });
+
+  // A finding about the incident has nobody to penalise.
+  it('should not ask for an action with no server penalty', () => {
+    setApi({ simgridServerCommandsUrl: LINK });
+    renderLive();
+    selectIncident();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Under investigation/ }),
+    );
+
+    expect(
+      screen.queryByText('Send this to the server?'),
+    ).not.toBeInTheDocument();
+  });
+});

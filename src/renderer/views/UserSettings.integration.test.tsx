@@ -15,6 +15,11 @@ jest.mock('../utils/postMessage', () => ({
   sendMessage: jest.fn(),
 }));
 
+// Its own concern, with its own channels; not what this file is about.
+jest.mock('../components/UserSettings/SimgridConnectorSettings', () => ({
+  SimgridConnectorSettings: () => null,
+}));
+
 jest.mock('../components/Common/ViewHeader', () => ({
   ViewHeader: ({
     title,

@@ -29,6 +29,11 @@ import {
   formatPenaltyChatMessage,
   resolveStewardAnnouncement,
 } from '../../utils/stewardChat';
+import {
+  SERVER_COMMAND_KIND_OPTIONS,
+  StewardServerCommandKind,
+  serverCommandOfKind,
+} from '../../utils/simgridCommands';
 
 interface Props {
   /**
@@ -127,10 +132,11 @@ export const StewardActionsEditor: React.FC<Props> = ({
             post-session review, and what each one says in the in-game chat. The
             label is what the decision records and what CSV, Markdown and JSON
             exports carry, so it can match your league&apos;s own wording. The
-            chat text is optional: leave it blank to say the label. The first
-            nine get keyboard shortcuts in the order below. Decisions already
-            made keep the wording they were made under, whatever you change
-            here.
+            chat text is optional: leave it blank to say the label. The server
+            penalty is what the SimGrid connector applies for that action, after
+            asking you. The first nine get keyboard shortcuts in the order
+            below. Decisions already made keep the wording they were made under,
+            whatever you change here.
           </Typography>
         </Box>
         <Tooltip
@@ -220,6 +226,64 @@ export const StewardActionsEditor: React.FC<Props> = ({
                 }
                 disabled={disabled}
               />
+              {/*
+                What this action does on the server, through the SimGrid
+                connector — nothing, unless set. Only offered on a call against
+                one driver: a server penalty has to land on somebody.
+              */}
+              <TextField
+                select
+                size="small"
+                sx={{ minWidth: 150 }}
+                value={
+                  action.driverScoped ? (action.serverCommand?.kind ?? '') : ''
+                }
+                SelectProps={{ native: true }}
+                inputProps={{
+                  'aria-label': `Action ${index + 1} server penalty`,
+                }}
+                onChange={(changeEvent) =>
+                  replaceAt(index, {
+                    serverCommand: serverCommandOfKind(
+                      changeEvent.target.value as StewardServerCommandKind | '',
+                      action.serverCommand && 'seconds' in action.serverCommand
+                        ? action.serverCommand.seconds
+                        : undefined,
+                    ),
+                  })
+                }
+                disabled={disabled || !action.driverScoped}
+              >
+                <option value="">No server penalty</option>
+                {SERVER_COMMAND_KIND_OPTIONS.map((option) => (
+                  <option key={option.kind} value={option.kind}>
+                    {option.label}
+                  </option>
+                ))}
+              </TextField>
+              {action.driverScoped &&
+              action.serverCommand &&
+              'seconds' in action.serverCommand ? (
+                <TextField
+                  size="small"
+                  type="number"
+                  sx={{ width: 84 }}
+                  value={action.serverCommand.seconds}
+                  inputProps={{
+                    min: 1,
+                    'aria-label': `Action ${index + 1} server penalty seconds`,
+                  }}
+                  onChange={(changeEvent) =>
+                    replaceAt(index, {
+                      serverCommand: serverCommandOfKind(
+                        action.serverCommand?.kind ?? '',
+                        changeEvent.target.value,
+                      ),
+                    })
+                  }
+                  disabled={disabled}
+                />
+              ) : null}
               {/*
                 "Does this apply to one driver, or to the incident?" — the check
                 that stops a penalty being recorded against a two-car incident

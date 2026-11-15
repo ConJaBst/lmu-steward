@@ -95,6 +95,12 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
    * renderer's `liveChatFeed.ts`.
    */
   liveChatFeedVisibleSeconds: 15,
+  /**
+   * The SimGrid Server Commands page for the event being stewarded — the
+   * address, or just its id. Empty means the SimGrid connector is off. See
+   * `simgrid.ts`.
+   */
+  simgridServerCommandsUrl: '',
 };
 
 /** The windows offered, longest-lived last. `null` is "never delete". */

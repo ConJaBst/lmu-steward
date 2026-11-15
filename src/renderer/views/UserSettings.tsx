@@ -30,6 +30,7 @@ import {
   toStoredStewardActions,
 } from '../utils/stewardActions';
 import { StewardActionsEditor } from '../components/UserSettings/StewardActionsEditor';
+import { SimgridConnectorSettings } from '../components/UserSettings/SimgridConnectorSettings';
 import {
   DEFAULT_AUTO_REPLAY_MIN_MAGNITUDE,
   MAX_AUTO_REPLAY_MIN_MAGNITUDE,
@@ -2025,6 +2026,10 @@ export const UserSettingsView: React.FC = () => {
                   />
                 </Stack>
               </Box>
+
+              <SimgridConnectorSettings
+                disabled={isLoading || isSaving || isLaunching}
+              />
 
               {/*
                 Rendered whether the toggle is on or off — someone deciding
